@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+# 通道观察工具的产物（图片 + 报告，可随时重跑）
+inspect/
+*.bak

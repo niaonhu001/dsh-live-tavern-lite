@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-21",
+  "note": "情绪原型库。三维连续空间 + 离散原型：模型只被要求给原型 id，必要时用 valence/arousal 微调；宿主把原型解析成具体模型的表情与动作。这里不写任何具体模型的表情名——那是 binding.json 的职责。",
+  "axes": {
+    "valence": {
+      "min": -1,
+      "max": 1,
+      "meaning": "愉快(1) ↔ 不悦(-1)"
+    },
+    "arousal": {
+      "min": -1,
+      "max": 1,
+      "meaning": "激动(1) ↔ 平静(-1)"
+    },
+    "dominance": {
+      "min": -1,
+      "max": 1,
+      "meaning": "主导(1) ↔ 顺从(-1)"
+    }
+  },
+  "defaultHoldMs": 9000,
+  "prototypes": [
+    {
+      "id": "neutral",
+      "label": "平静",
+      "valence": 0.0,
+      "arousal": 0.0,
+      "dominance": 0.0,
+      "intensity": 0.15,
+      "motions": []
+    },
+    {
+      "id": "calm",
+      "label": "安稳",
+      "valence": 0.2,
+      "arousal": -0.6,
+      "dominance": 0.15,
+      "intensity": 0.3,
+      "motions": []
+    },
+    {
+      "id": "sleepy",
+      "label": "困倦",
+      "valence": -0.05,
+      "arousal": -0.95,
+      "dominance": -0.35,
+      "intensity": 0.6,
+      "motions": []
+    },
+    {
+      "id": "joy",
+      "label": "开心",
+      "valence": 0.85,
+      "arousal": 0.45,
+      "dominance": 0.35,
+      "intensity": 0.8,
+      "motions": []
+    },
+    {
+      "id": "tender",
+      "label": "温柔",
+      "valence": 0.8,
+      "arousal": -0.5,
+      "dominance": 0.45,
+      "intensity": 0.55,
+      "motions": []
+    },
+    {
+      "id": "shy",
+      "label": "害羞",
+      "valence": 0.2,
+      "arousal": -0.1,
+      "dominance": -0.7,
+      "intensity": 0.6,
+      "motions": []
+    },
+    {
+      "id": "smug",
+      "label": "得意",
+      "valence": 0.45,
+      "arousal": 0.2,
+      "dominance": 0.8,
+      "intensity": 0.6,
+      "motions": []
+    },
+    {
+      "id": "curious",
+      "label": "好奇",
+      "valence": 0.4,
+      "arousal": 0.6,
+      "dominance": 0.2,
+      "intensity": 0.55,
+      "motions": []
+    },
+    {
+      "id": "surprise",
+      "label": "惊讶",
+      "valence": 0.1,
+      "arousal": 0.95,
+      "dominance": -0.2,
+      "intensity": 1.0,
+      "motions": []
+    },
+    {
+      "id": "annoyed",
+      "label": "嫌弃",
+      "valence": -0.45,
+      "arousal": 0.3,
+      "dominance": 0.5,
+      "intensity": 0.55,
+      "motions": []
+    },
+    {
+      "id": "anger",
+      "label": "生气",
+      "valence": -0.8,
+      "arousal": 0.75,
+      "dominance": 0.7,
+      "intensity": 0.85,
+      "motions": []
+    },
+    {
+      "id": "sad",
+      "label": "难过",
+      "valence": -0.85,
+      "arousal": -0.35,
+      "dominance": -0.35,
+      "intensity": 0.65,
+      "motions": []
+    },
+    {
+      "id": "lonely",
+      "label": "寂寞",
+      "valence": -0.4,
+      "arousal": -0.75,
+      "dominance": -0.7,
+      "intensity": 0.55,
+      "motions": []
+    },
+    {
+      "id": "fear",
+      "label": "害怕",
+      "valence": -0.6,
+      "arousal": 0.8,
+      "dominance": -0.85,
+      "intensity": 0.85,
+      "motions": []
+    }
+  ]
+}

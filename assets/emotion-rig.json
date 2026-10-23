@@ -1,0 +1,178 @@
+{
+  "version": 2,
+  "description": "情绪向量 → 模型参数 的参考映射。LLM 只给 valence/arousal/dominance/intensity，插件按本表算出参数目标值。只收录经浏览器实测确认能改变画面的参数；死参数写进去无害但也无用，留着只会骗自己。",
+  "formula": "value = clamp(base + intensity * (valence*wV + arousal*wA + dominance*wD), min, max)",
+  "axes": [
+    "valence",
+    "arousal",
+    "dominance"
+  ],
+  "verifiedAgainst": "ailian（Cubism 3，207 参数）— 逐条拖动参数勘探滑杆实测确认",
+  "params": [
+    {
+      "id": "ParamEyeLOpen",
+      "role": "左眼睁开",
+      "zone": "face",
+      "confidence": "verified",
+      "base": 1,
+      "min": 0,
+      "max": 1,
+      "weights": {
+        "valence": -0.1,
+        "arousal": 0.4,
+        "dominance": 0
+      },
+      "note": "没有笑眼参数：唤醒度决定眼皮（困倦/寂寞下垂，惊讶/生气睁大），愉快再叠一点微眯"
+    },
+    {
+      "id": "ParamEyeROpen",
+      "role": "右眼睁开",
+      "zone": "face",
+      "confidence": "verified",
+      "base": 1,
+      "min": 0,
+      "max": 1,
+      "weights": {
+        "valence": -0.1,
+        "arousal": 0.4,
+        "dominance": 0
+      },
+      "note": "没有笑眼参数：唤醒度决定眼皮（困倦/寂寞下垂，惊讶/生气睁大），愉快再叠一点微眯"
+    },
+    {
+      "id": "ParamEyeBallX",
+      "role": "眼球左右",
+      "zone": "face",
+      "confidence": "verified",
+      "base": 0,
+      "min": -1,
+      "max": 1,
+      "weights": {
+        "valence": 0,
+        "arousal": 0.14,
+        "dominance": 0.22
+      },
+      "note": "主导时更直视，顺从时视线偏开"
+    },
+    {
+      "id": "ParamEyeBallY",
+      "role": "眼球上下",
+      "zone": "face",
+      "confidence": "verified",
+      "base": 0,
+      "min": -1,
+      "max": 1,
+      "weights": {
+        "valence": 0.08,
+        "arousal": 0.08,
+        "dominance": 0.45
+      },
+      "note": "低头/羞怯时视线下垂"
+    },
+    {
+      "id": "ParamMouthForm",
+      "role": "嘴角",
+      "zone": "face",
+      "confidence": "verified",
+      "base": 0,
+      "min": -1,
+      "max": 1,
+      "weights": {
+        "valence": 0.9,
+        "arousal": 0.1,
+        "dominance": 0.12
+      },
+      "note": "全套里最可靠的表情通道，权重最高。没有笑眼参数，笑全靠它"
+    },
+    {
+      "id": "ParamMouthOpenY",
+      "role": "张嘴",
+      "zone": "face",
+      "confidence": "verified",
+      "base": 0.04,
+      "min": 0,
+      "max": 1,
+      "weights": {
+        "valence": 0.05,
+        "arousal": 0.85,
+        "dominance": 0.1
+      },
+      "note": "惊讶是第一驱动：唤醒度 0.95 时张到约 0.83；开心只到 0.4 左右"
+    },
+    {
+      "id": "ParamCheeckPuff",
+      "role": "鼓腮",
+      "zone": "face",
+      "confidence": "verified",
+      "base": 0,
+      "min": 0,
+      "max": 1,
+      "weights": {
+        "valence": -0.32,
+        "arousal": 0.12,
+        "dominance": -0.08
+      },
+      "note": "用在赌气/不满；别让它出现在开心的脸上"
+    },
+    {
+      "id": "ParamAngleX",
+      "role": "头左右转",
+      "zone": "pose",
+      "confidence": "verified",
+      "base": 0,
+      "min": -30,
+      "max": 30,
+      "weights": {
+        "valence": 0,
+        "arousal": 0.05,
+        "dominance": 0.12
+      },
+      "note": "物理会带动头发与尾巴"
+    },
+    {
+      "id": "ParamAngleY",
+      "role": "头上下",
+      "zone": "pose",
+      "confidence": "verified",
+      "base": 0,
+      "min": -30,
+      "max": 30,
+      "weights": {
+        "valence": 0.1,
+        "arousal": 0.08,
+        "dominance": 0.5
+      },
+      "note": "主导时抬下巴、顺从时低头；这是 anger 与 fear 唯一能分开的地方，所以权重放重"
+    },
+    {
+      "id": "ParamAngleZ",
+      "role": "头歪",
+      "zone": "pose",
+      "confidence": "verified",
+      "base": 0,
+      "min": -30,
+      "max": 30,
+      "weights": {
+        "valence": 0.3,
+        "arousal": 0.04,
+        "dominance": 0
+      },
+      "note": "歪头是最省力的可爱来源"
+    },
+    {
+      "id": "ParamBreath",
+      "role": "呼吸起伏",
+      "zone": "pose",
+      "confidence": "verified",
+      "base": 0,
+      "min": 0,
+      "max": 1,
+      "weights": {
+        "valence": 0.04,
+        "arousal": 0.4,
+        "dominance": 0
+      },
+      "note": "激动时呼吸更明显，叠加在模型自己的呼吸动画上"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# dsh-live-tavern bundle patch: inserts the Host row that owns the model routes, the
+# stage event stream and the calibration binding file.
+- insert:
+    - id: dsh-live-tavern-lite
+      name: dsh-live-tavern-lite
+      config:
+        placement: chat
+        calibrate: true
+        # The cross-session judge is on by default; the cadence is counted in turns.
+        director: true
+        stageEveryTurns: 1
+        stageUpdatesPerTurn: 2
+        directorMaxCallsPerHour: 60

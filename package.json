@@ -1,0 +1,73 @@
+{
+  "name": "dsh-live-tavern-lite",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Live2D character stage for the DeepSeek Harness Web UI: chat-column background, foreground overlay and sidebar seats, same-origin model serving, LLM emotion control with a cross-session director, SillyTavern-style character cards and world books, and a settings page.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "live2d",
+    "cubism",
+    "pixi",
+    "tavern",
+    "character-card"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/niaonhu001/dsh-live-tavern-lite.git"
+  },
+  "homepage": "https://github.com/niaonhu001/dsh-live-tavern-lite#readme",
+  "bugs": {
+    "url": "https://github.com/niaonhu001/dsh-live-tavern-lite/issues"
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "main": "lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/host.test.mjs test/pack.test.mjs test/artifact.test.mjs test/schema.test.mjs test/json-value.test.mjs test/recall.test.mjs test/rig.test.mjs test/pack-layout.test.mjs test/tracks.test.mjs test/presets.test.mjs test/prompt-section.test.mjs test/memory-session.test.mjs test/memory.test.mjs test/direct.test.mjs test/speech.test.mjs",
+    "prepublishOnly": "npm run build && npm test",
+    "pack:check": "npm pack --dry-run",
+    "inspect": "node scripts/inspect-channels.mjs",
+    "verify:recipes": "node scripts/verify-recipes.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@pixiv/three-vrm": "^3.5.5",
+    "@pixiv/three-vrm-animation": "^3.5.5",
+    "esbuild": "^0.28.1",
+    "pixi.js": "^8.22.0",
+    "three": "^0.186.1",
+    "untitled-pixi-live2d-engine": "^1.4.0"
+  }
+}
