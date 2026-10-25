@@ -1041,6 +1041,33 @@ test('every settings field carries a value the form can read', async () => {
   harness.disposeAll()
 })
 
+test('a pack chosen by absolute path serves its own rig table', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-rigpath-'))
+  process.env.DSH_HOME = home
+  // The pack lives outside both configured roots, exactly like /sdcard/Download/ailian.
+  const pack = join(home, 'Download', 'ailian')
+  await mkdir(pack, { recursive: true })
+  await writeFile(join(pack, 'ailian.model3.json'), JSON.stringify({ FileReferences: { Moc: 'a.moc3' } }))
+  // A pinned parameter the packaged table does not know: the marker that the file was found.
+  await writeFile(join(pack, 'rig.json'), JSON.stringify({
+    id: 'ailian',
+    params: [
+      { id: 'Paramheadxy', base: 30, min: 0, max: 30, fixed: true, note: '水印恒取最大值' },
+      { id: 'ParamMouthForm', base: 0, min: -1, max: 1, weights: { valence: 0.6, arousal: 0, dominance: 0 } },
+    ],
+  }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { pack: pack, packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  const config = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/config'))).text)
+  assert.equal(config.selected.id, 'ailian')
+  assert.equal(config.rig.source, 'model', 'the pack rig must be used, not the packaged fallback')
+  assert.equal(config.rig.params.length, 2)
+  assert.equal(config.rig.params[0].id, 'Paramheadxy')
+
+  harness.disposeAll()
+})
+
 test('a stray space in the pack path does not hide the model', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-space-'))
   process.env.DSH_HOME = home

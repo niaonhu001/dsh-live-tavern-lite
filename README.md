@@ -13,6 +13,16 @@
 - [HTTP 路由](#http-路由)
 - [开发](#开发)
 
+## 包文件查找（1.0.4）
+
+角色包里的 `rig.json` / `params.json` / `presets.json` / `memory.json` / `card.json` 都按**同一个包目录**找，而这个目录现在有三种来源：
+
+1. 绝对路径选中的包 → **它自己**（`config.packPath`）
+2. `packsRoot/<id>`（含 `model/` 子目录）
+3. `modelsRoot/<id>`（旧布局）
+
+1.0.3 之前的 `packFilePath()` 只认后两者，于是「用绝对路径选的包」里那张 `rig.json` 永远读不到，`/config` 会静默回退到插件自带的 11 参数表——表里没有的 `Paramheadxy` 自然也就没有 `fixed: true` 这条规则。现在绝对路径的包同样参与查找，`rig.source` 会如实变成 `model`。
+
 ## 安卓端的三个修复（1.0.3）
 
 | 现象 | 根因 | 处理 |
