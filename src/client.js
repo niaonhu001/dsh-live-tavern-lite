@@ -675,6 +675,16 @@ function onModelPointerUp(event) {
   const moved = pressState.moved
   pressState = null
   S.dragging = false
+  // Re-anchor the fall at the dropped position: dragging chooses where she stands, it must
+  // never be undone by gravity the moment the pointer is released.
+  const stage = S.vrm
+  if (stage !== null && stage !== undefined && stage.gravity !== undefined && stage.gravity !== null && stage.vrm !== null) {
+    stage.gravity.base = (stage.pivot?.position.y ?? 0) + stage.vrm.scene.position.y
+    stage.gravity.offset = 0
+    stage.gravity.velocity = 0
+    // Let the next frame re-derive the floor from where her feet ended up.
+    stage.floorY = null
+  }
   document.body.classList.remove('dsh-l2d-grabbing')
   if (moved >= DRAG_THRESHOLD) {
     saveLayout()
@@ -759,6 +769,9 @@ const VRM_BONES = {
 
 /** Degrees → radians, for the bone channels above. */
 const DEG = Math.PI / 180
+
+/** Scratch vector for foot-height probes; reused so the render loop allocates nothing. */
+const GROUND_VEC = new THREE.Vector3()
 
 /** Preset expression weights per emotion prototype. Values are scaled by intensity. */
 const VRM_EMOTIONS = {
@@ -1116,6 +1129,73 @@ async function startVrmEngine(config) {
   stage.hips = hips;
   stage.hipsRest = hips === null || hips === undefined ? null : hips.position.clone()
   stage.tracks = []
+  // A real floor object the avatar stands on: she may leave it (a jump) and is only pushed
+  // back up when a pose would push her feet through it.
+  stage.groundLock = true
+  stage.floorY = null
+  /** Simulated vertical motion of the whole body, in scene units per second. */
+  stage.gravity = { acceleration: -9.8 * 100, velocity: 0, offset: 0, base: null }
+  fitVrm()
+
+  /**
+   * World Y of the lower foot, in the scene space the floor lives in.
+   *
+   * @param stage - The running VRM stage.
+   * @returns The lowest foot height, or null when the rig has no feet.
+   */
+  function lowestFootY(stage) {
+    const humanoid = stage.vrm?.humanoid
+    if (humanoid === undefined || humanoid === null) return null
+    let lowest = Infinity
+    for (const name of ['leftFoot', 'rightFoot']) {
+      const foot = humanoid.getNormalizedBoneNode?.(name) ?? null
+      if (foot === null || foot === undefined) continue
+      foot.updateWorldMatrix(true, false)
+      foot.getWorldPosition(GROUND_VEC)
+      if (GROUND_VEC.y < lowest) lowest = GROUND_VEC.y
+    }
+    return Number.isFinite(lowest) ? lowest : null
+  }
+
+  /**
+   * Add the floor plane and its grid once the model is scaled, so the stage has an actual
+   * ground the avatar stands on instead of an invisible constraint.
+   *
+   * @param stage - The running VRM stage.
+   */
+  function ensureFloor(stage) {
+    if (stage.floor !== undefined) return
+    const root = stage.vrm?.scene
+    if (root === undefined || root === null || stage.baseSize === undefined) return
+    const scale = Math.abs(root.scale.x) || 1
+    const width = Math.max(stage.baseSize.x * scale * 2.6, stage.baseSize.y * scale * 1.3, 1)
+    // Include the drag pivot: the floor follows the avatar wherever she is placed.
+    const y = (stage.pivot?.position.y ?? 0) + root.position.y + stage.baseBottom * scale
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, width),
+      new THREE.MeshBasicMaterial({ color: 0x24242a, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }),
+    )
+    floor.rotation.x = -Math.PI / 2
+    floor.position.set(root.position.x, y, 0)
+    stage.scene.add(floor)
+    const grid = new THREE.GridHelper(width, 24, 0x5c5c68, 0x3a3a42)
+    grid.position.set(root.position.x, y + 0.0005 * width, 0)
+    stage.scene.add(grid)
+    stage.floor = floor
+    stage.floorGrid = grid
+    // floorY stays null until the first frame measures a foot; the bounding box bottom is
+    // not the sole of the shoe, and using it made her hover and twitch on every frame.
+    stage.floorY = null
+    // The scene is scaled to screen pixels, so convert m/s² into scene units: one model
+    // height (about 1.6 m) is baseSize.y × scale units.
+    const heightUnits = stage.baseSize.y * scale
+    if (heightUnits > 1) {
+      stage.gravity.acceleration = -9.8 * (heightUnits / 1.6)
+      // One metre in scene units, so an impulse given in m/s lands at the right speed.
+      stage.unitsPerMetre = heightUnits / 1.6
+    }
+  }
+
   fitVrm()
   stage.mask = mask
   stage.maskText = maskText
@@ -1158,13 +1238,42 @@ async function startVrmEngine(config) {
       bone.node.rotation[bone.axis] = bone.rest + next * DEG
     }
     // Body offset (a crouch), in metres relative to the hips' rest position.
+    // `HipsY=…@ms` inside `animation` animates that offset, so a bounce can keyframe the
+    // whole body instead of pinning one static crouch per call.
+    if (stage.hipsTrack !== null && stage.hipsTrack !== undefined) {
+      const stepped = stepTracks([stage.hipsTrack], performance.now())
+      const channel = stepped.values.get(stage.hipsTrack.id)
+      if (channel !== undefined) stage.hipsAnimatedY = channel.value
+      if (!stepped.active) stage.hipsTrack = null
+    }
+    // Whole-body travel across the stage, in metres. Separate from `HipsY` because walking
+    // and turning are placement, not pose: no bone rotation can produce them.
+    if (stage.moveTrack !== null && stage.moveTrack !== undefined) {
+      const stepped = stepTracks([stage.moveTrack], performance.now())
+      const channel = stepped.values.get(stage.moveTrack.id)
+      if (channel !== undefined) {
+        if (stage.moveTrack.id === 'MoveX') stage.moveX = channel.value
+        else stage.moveZ = channel.value
+      }
+      if (!stepped.active) stage.moveTrack = null
+      const root = stage.vrm?.scene
+      if (root !== undefined && root !== null) {
+        root.position.x = Number(stage.moveX ?? 0)
+        root.position.z = Number(stage.moveZ ?? 0)
+        if (stage.floor !== undefined && stage.floor !== null) {
+          stage.floor.position.x = root.position.x
+          stage.floorGrid.position.x = root.position.x
+        }
+      }
+    }
     if (stage.hips !== null && stage.hips !== undefined && stage.hipsRest !== null && stage.hipsRest !== undefined) {
       const offset = stage.translate?.['hips']
-      if (Array.isArray(offset) && offset.length === 3) {
+      const animated = Number(stage.hipsAnimatedY ?? 0)
+      if ((Array.isArray(offset) && offset.length === 3) || animated !== 0) {
         stage.hips.position.set(
-          stage.hipsRest.x + Number(offset[0] ?? 0),
-          stage.hipsRest.y + Number(offset[1] ?? 0),
-          stage.hipsRest.z + Number(offset[2] ?? 0),
+          stage.hipsRest.x + Number(offset?.[0] ?? 0),
+          stage.hipsRest.y + Number(offset?.[1] ?? 0) + animated,
+          stage.hipsRest.z + Number(offset?.[2] ?? 0),
         )
       } else if (!stage.hips.position.equals(stage.hipsRest)) {
         stage.hips.position.copy(stage.hipsRest)
@@ -1188,6 +1297,73 @@ async function startVrmEngine(config) {
     stepVrmTracks(performance.now())
     easeVrmExpressions(delta)
     vrm.update(delta)
+    // Body facing: eased yaw of the model root, so a turn is a real turn of the whole rig.
+    if (stage.turnTrack !== undefined && stage.turnTrack !== null) {
+      // 多关键帧轨道：按累计毫秒插值，走完停在最后一条。
+      const track = stage.turnTrack
+      const elapsed = performance.now() - track.start
+      let acc = 0
+      let prev = track.from
+      let value = null
+      for (const entry of track.entries) {
+        const span = Math.max(1, Number(entry.ms) || 100)
+        if (elapsed <= acc + span) {
+          const t = Math.min(1, Math.max(0, (elapsed - acc) / span))
+          // 线性：这条轨道多来自逐帧采样，每段再缓一次会让转向一顿一顿。
+          value = prev + (Number(entry.value) * DEG - prev) * t
+          break
+        }
+        acc += span
+        prev = Number(entry.value) * DEG
+      }
+      if (value === null) value = prev
+      stage.vrm.scene.rotation.y = value
+    } else if (stage.turn !== undefined && stage.turn !== null) {
+      const turn = stage.turn
+      const t = Math.min(1, Math.max(0, (performance.now() - turn.start) / turn.duration))
+      const eased = t * t * (3 - 2 * t)
+      stage.vrm.scene.rotation.y = turn.from + (turn.to - turn.from) * eased
+      if (t >= 1) stage.turn = null
+    }
+    // Gravity and ground contact, with hysteresis: the body only falls while both feet are
+    // clear of the floor by more than a dead zone, and only lifts when a foot has gone
+    // through it. Snapping every frame at the contact line made her twitch.
+    if (stage.groundLock === true) {
+      ensureFloor(stage)
+      const body = stage.gravity
+      const root = stage.vrm.scene
+      if (body.base === null) body.base = root.position.y
+      // Only write the root when the change is visible: a sub-pixel write every frame makes
+      // the spring bones (skirt, hair) twitch, because they react to their parent's motion.
+      const wanted = body.base + body.offset
+      if (Math.abs(root.position.y - wanted) > 0.05) root.position.y = wanted
+      // No second vrm.update(): its spring-bone solver would step twice per frame. World
+      // matrices are refreshed by the probe below, which is all the contact check needs.
+      const lowest = lowestFootY(stage)
+      const deadZone = 0.0015 * (Number(stage.unitsPerMetre) > 0 ? Number(stage.unitsPerMetre) : 600)
+      if (lowest !== null && stage.floorY === null) {
+        // The floor is exactly where her feet stood on the first frame that had a pose.
+        stage.floorY = lowest
+        if (stage.floor !== undefined) {
+          stage.floor.position.y = lowest
+          stage.floorGrid.position.y = lowest + deadZone * 0.4
+        }
+      }
+      if (lowest !== null && stage.floorY !== null) {
+        if (lowest < stage.floorY - deadZone) {
+          root.position.y += stage.floorY - lowest
+          body.offset = root.position.y - body.base
+          body.velocity = 0
+        } else if (lowest <= stage.floorY + deadZone) {
+          body.velocity = 0
+        } else if (S.dragging !== true) {
+          // Airborne: integrate. Clamp dt so a backgrounded tab cannot teleport her.
+          const step = Math.min(0.05, Math.max(0, delta))
+          body.velocity += body.acceleration * step
+          body.offset += body.velocity * step
+        }
+      }
+    }
     renderer.render(scene, camera)
     stage.frames += 1
     if (stage.springReady !== true && stage.frames > 2) {
@@ -1273,9 +1449,14 @@ function fitVrm() {
   if (stage.appliedScale !== scale) {
     root.scale.setScalar(scale)
     stage.appliedScale = scale
-    // The standing reference must be in the same units the checks use.
-    const rest = readPoseSkeleton(stage.vrm, scale)
-    if (rest !== null) stage.restFrame = { headY: rest.head.y, footY: rest.leftFoot.y }
+    // The standing reference must be in the same units the checks use, and it must be
+    // captured while the rig is actually standing: grabbing it in the middle of an
+    // animation records a bent pose as "rest", which makes every height check meaningless.
+    const idle = stage.hipsTrack === null || stage.hipsTrack === undefined
+    if (idle || stage.restFrame === undefined || stage.restFrame === null) {
+      const rest = readPoseSkeleton(stage.vrm, scale)
+      if (rest !== null) stage.restFrame = { headY: rest.head.y, footY: rest.leftFoot.y }
+    }
   }
   stage.drawn = {
     widthPx: Math.round(baseWidth * scale),
@@ -1296,6 +1477,19 @@ function fitVrm() {
     -((S.layout?.model?.y ?? 0) + shift.y),
     0,
   )
+  // The floor belongs to the stage, not to the world: dragging moves the avatar and her
+  // floor together. A world-fixed floor would turn every upward drag into a fall, because
+  // the feet would read as "above the ground" and gravity would pull her back down.
+  if (stage.gravity !== undefined && stage.gravity !== null) {
+    stage.gravity.base = pivot.position.y + root.position.y
+    stage.gravity.offset = 0
+    stage.gravity.velocity = 0
+  }
+  if (stage.floor !== undefined && stage.gravity !== undefined && stage.gravity !== null) {
+    // Re-derive the floor from the feet on the next frame instead of trusting the old
+    // bounding-box bottom, which drifts with the pose.
+    stage.floorY = null
+  }
   pivot.updateMatrixWorld(true)
 }
 
@@ -1438,11 +1632,68 @@ function applyVrmFrame(frame) {
   }
 }
 
+/** Ids that move the whole body instead of a bone; values are metres, negative is down. */
+const HIPS_TRACK_IDS = new Set(['HipsY', 'HipsMoveY'])
+
+/**
+ * Ids that slide the whole body across the stage, in metres.
+ *
+ * Turns needed a root yaw; walking needs a root offset. Bone rotations cannot produce either,
+ * which is why a dance transcribed only from limb angles never leaves its spot.
+ */
+const MOVE_TRACK_IDS = new Set(['MoveX', 'MoveZ'])
+
 /** Start bone tracks from an `animation` string. */
 function startVrmTracks(text) {
   const stage = S.vrm
   if (stage === null) return
-  const parsed = parseTracks(text).filter(entry => stage.bones.has(entry.id))
+  const entries = parseTracks(text)
+  // `TurnY=<deg>@ms` yaws the whole body. None of the 153 bone channels can do it: the
+  // hips' Y axis is a dead twist, so facing has to be a rotation of the model root.
+  const turn = entries.find(entry => entry.id === 'TurnY')
+  if (turn !== undefined) {
+    const root = stage.vrm.scene
+    const from = Number(root.rotation.y) || 0
+    const turnEntries = entries.filter(entry => entry.id === 'TurnY')
+    if (turnEntries.length > 1) {
+      // 多关键帧的 TurnY 是一条真正的轨道：逐帧插值，才能转过去再转回来。
+      // 只取第一条会把它当成一次性缓动，整段只剩起手朝向。
+      stage.turn = null
+      stage.turnTrack = { from, entries: turnEntries, start: performance.now() }
+    } else {
+      stage.turnTrack = null
+      const to = Number(turn.value) * DEG
+      stage.turn = { from, to, start: performance.now(), duration: Math.max(60, Number(turn.ms) || 400) }
+    }
+  }
+  // `JumpV=<m/s>@ms` is an impulse, not a pose: it seeds the vertical velocity gravity then
+  // integrates. Without it a pose cannot leave the floor — raising the hips raises the feet
+  // with them, and ground contact pulls the body straight back down.
+  const jump = entries.find(entry => entry.id === 'JumpV')
+  if (jump !== undefined && stage.gravity !== undefined && stage.gravity !== null) {
+    const units = Number(stage.unitsPerMetre) > 0 ? Number(stage.unitsPerMetre) : 600
+    const speed = Math.max(0, Number(jump.value) || 0) * units
+    if (speed > 0) stage.gravity.velocity = speed
+  }
+  const hipsEntries = entries.filter(entry => HIPS_TRACK_IDS.has(entry.id))
+  if (hipsEntries.length > 0) {
+    const [channel] = startTracks(hipsEntries, () => 0, performance.now())
+    stage.hipsTrack = channel ?? null
+  } else {
+    // A pose without a body track returns the body to its rest height.
+    stage.hipsTrack = null
+    stage.hipsAnimatedY = 0
+  }
+  const moveEntries = entries.filter(entry => MOVE_TRACK_IDS.has(entry.id))
+  if (moveEntries.length > 0) {
+    const [channel] = startTracks(moveEntries, () => 0, performance.now())
+    stage.moveTrack = channel ?? null
+  } else {
+    stage.moveTrack = null
+    stage.moveX = 0
+    stage.moveZ = 0
+  }
+  const parsed = entries.filter(entry => stage.bones.has(entry.id))
   if (parsed.length === 0) return
   const read = (id) => {
     const bone = stage.bones.get(id)

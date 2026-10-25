@@ -1037,6 +1037,45 @@ test('every settings field carries a value the form can read', async () => {
   harness.disposeAll()
 })
 
+test('VRM-only settings are hidden while a Live2D model is mounted', async () => {
+  const vrmOnly = ['springGravity', 'springStrength', 'poseDwell']
+
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-kinds-'))
+  process.env.DSH_HOME = home
+  const packs = join(home, 'live2d', 'packs')
+
+  // A Live2D pack: a model settings file is what makes one.
+  const live = join(packs, 'live')
+  await mkdir(live, { recursive: true })
+  await writeFile(join(live, 'live.model3.json'), JSON.stringify({ FileReferences: { Moc: 'live.moc3' } }))
+
+  const threeD = join(packs, 'three')
+  await mkdir(threeD, { recursive: true })
+  await writeFile(join(threeD, 'three.vrm'), Buffer.from('glTF'))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models') })
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'live' }))
+  const asLive2d = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/settings'))).text)
+  assert.equal(asLive2d.stageKind, 'live2d')
+  for (const key of vrmOnly) {
+    assert.ok(!asLive2d.fields.some(field => field.key === key), `${key} must not show for a Live2D model`)
+  }
+
+  // Switching the pack to a VRM brings them back.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'three' }))
+  const fresh = fakeContext()
+  apply(fresh.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models') })
+  const asVrm = JSON.parse((await call(fresh.find('/dsh-live-tavern-lite/settings'))).text)
+  assert.equal(asVrm.stageKind, 'vrm')
+  for (const key of vrmOnly) {
+    assert.ok(asVrm.fields.some(field => field.key === key), `${key} must show for a VRM model`)
+  }
+
+  harness.disposeAll()
+  fresh.disposeAll()
+})
+
 test('every settings field ships a reset default, mirrored by the client fallback', async () => {
   const defaults = internals.resolveConfig({}).defaults
   for (const field of internals.settingsFields) {

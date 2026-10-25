@@ -1,12 +1,12 @@
 {
-  "version": 1,
-  "note": "基础姿势：每个配方之下的默认身体状态。模型静止时是 T 姿势（手水平伸出），任何动作看起来都像在走钢丝，所以这里先把手放下来；配方或 params 里同名的通道会覆盖它。数值来自实测（左臂正 Z 下落、右臂正 Z 上抬）。",
-  "params": {
-    "BoneLeftUpperArmZ": 72,
-    "BoneRightUpperArmZ": -72,
-    "BoneLeftLowerArmZ": 12,
-    "BoneRightLowerArmZ": -12,
-    "BoneLeftUpperArmY": -8,
-    "BoneRightUpperArmY": 8
-  }
+ "version": 1,
+ "note": "基础姿势：每个配方之下的默认身体状态。模型静止时是 T 姿势（手水平伸出），任何动作看起来都像在走钢丝，所以这里先把手放下来；配方或 params 里同名的通道会覆盖它。数值来自实测（左臂正 Z 下落、右臂正 Z 上抬）。",
+ "params": {
+  "BoneLeftUpperArmZ": 72,
+  "BoneRightUpperArmZ": -72,
+  "BoneLeftLowerArmZ": 12,
+  "BoneRightLowerArmZ": -12,
+  "BoneLeftUpperArmY": -8,
+  "BoneRightUpperArmY": 8
+ }
 }

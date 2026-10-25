@@ -1,0 +1,96 @@
+{
+ "dance12": [
+  "TurnY",
+  "BoneLeftUpperArmZ",
+  "BoneRightUpperArmZ",
+  "BoneLeftUpperArmY",
+  "BoneRightUpperArmY",
+  "BoneLeftLowerArmZ",
+  "BoneRightLowerArmZ",
+  "BoneLeftUpperLegX",
+  "BoneRightUpperLegX",
+  "BoneLeftLowerLegX",
+  "BoneRightLowerLegX",
+  "BoneSpineZ"
+ ],
+ "wave6": [
+  "TurnY",
+  "BoneRightUpperArmZ",
+  "BoneRightUpperArmY",
+  "BoneRightLowerArmY",
+  "BoneRightHandZ",
+  "BoneSpineX"
+ ],
+ "squat6": [
+  "HipsY",
+  "BoneLeftUpperLegX",
+  "BoneRightUpperLegX",
+  "BoneLeftLowerLegX",
+  "BoneRightLowerLegX",
+  "BoneSpineX"
+ ],
+ "turn3": [
+  "TurnY",
+  "BoneHipsY",
+  "BoneSpineY"
+ ],
+ "bye6": [
+  "TurnY",
+  "BoneLeftUpperArmZ",
+  "BoneLeftUpperArmY",
+  "BoneLeftLowerArmY",
+  "BoneLeftHandZ",
+  "BoneHeadZ"
+ ],
+ "walk7": [
+  "TurnY",
+  "MoveX",
+  "HipsY",
+  "BoneLeftUpperLegX",
+  "BoneRightUpperLegX",
+  "BoneLeftLowerLegX",
+  "BoneRightLowerLegX"
+ ],
+ "palmtest": [
+  "TurnY",
+  "BoneRightUpperArmZ",
+  "BoneRightUpperArmY",
+  "BoneRightLowerArmY",
+  "BoneRightHandZ"
+ ],
+ "turnprobe": [
+  "TurnY"
+ ],
+ "deepsquat": [
+  "HipsY",
+  "BoneLeftUpperLegX",
+  "BoneRightUpperLegX",
+  "BoneLeftLowerLegX",
+  "BoneRightLowerLegX",
+  "BoneLeftFootX",
+  "BoneRightFootX",
+  "BoneSpineX"
+ ],
+ "squatv": [
+  "HipsY",
+  "BoneLeftUpperLegX",
+  "BoneRightUpperLegX",
+  "BoneLeftLowerLegX",
+  "BoneRightLowerLegX",
+  "BoneLeftFootX",
+  "BoneRightFootX",
+  "BoneSpineX",
+  "BoneRightUpperArmZ",
+  "BoneRightLowerArmY",
+  "BoneRightThumbProximalZ",
+  "BoneRightThumbIntermediateZ",
+  "BoneRightIndexProximalY",
+  "BoneRightIndexIntermediateX",
+  "BoneRightMiddleProximalZ",
+  "BoneRightMiddleIntermediateZ",
+  "BoneRightRingProximalZ",
+  "BoneRightRingIntermediateZ",
+  "BoneRightLittleProximalZ",
+  "BoneRightLittleIntermediateZ"
+ ]
+}

@@ -1,0 +1,322 @@
+{
+  "version": 3,
+  "note": "语义姿势配方：模型不用记 153 条骨骼通道，直接给 id。params 是定格姿势（绝对角度），animation 有先后顺序，easeMs 控制过渡。数值按实测轴符号（正数抬头/后仰，负数低头/前俯；左臂正 Z 下落、右臂正 Z 上抬），每个关节的角度都落在该部位的常用范围内，大动作拆到多个关节分摊。 translate 是整体位移（米），用来做下蹲这种旋转做不到的事。",
+  "recipes": [
+    {
+      "id": "nod",
+      "label": "点头",
+      "intent": "答应、肯定、听懂了",
+      "kind": "vrm",
+      "animation": "BoneHeadX=-13@170; BoneNeckX=-5@170; BoneHeadX=0@310; BoneNeckX=0@310",
+      "easeMs": 310
+    },
+    {
+      "id": "shake",
+      "label": "摇头",
+      "intent": "否定、拒绝、不赞同",
+      "kind": "vrm",
+      "animation": "BoneHeadY=-14@170; BoneNeckY=-6@170; BoneHeadY=14@350; BoneNeckY=6@350; BoneHeadY=0@530; BoneNeckY=0@530",
+      "easeMs": 320
+    },
+    {
+      "id": "tilt",
+      "label": "歪头思考",
+      "intent": "疑惑、琢磨、好奇",
+      "kind": "vrm",
+      "params": {
+        "BoneHeadZ": 14,
+        "BoneHeadX": -4,
+        "BoneNeckY": 7,
+        "BoneNeckZ": 5
+      },
+      "easeMs": 420
+    },
+    {
+      "id": "lean_in",
+      "label": "凑近",
+      "intent": "好奇、压低声音、想听清",
+      "kind": "vrm",
+      "params": {
+        "BoneHipsX": -5,
+        "BoneSpineX": -10,
+        "BoneChestX": -8,
+        "BoneNeckX": -5,
+        "BoneHeadX": -5,
+        "BoneNeckY": 4
+      },
+      "easeMs": 600
+    },
+    {
+      "id": "recoil",
+      "label": "后仰",
+      "intent": "惊讶、被吓到、嫌弃",
+      "kind": "vrm",
+      "params": {
+        "BoneSpineX": 8,
+        "BoneChestX": 6,
+        "BoneHeadX": 6
+      },
+      "easeMs": 260
+    },
+    {
+      "id": "shrug",
+      "label": "耸肩",
+      "intent": "不知道、无所谓、摊手",
+      "kind": "vrm",
+      "params": {
+        "BoneLeftShoulderZ": -16,
+        "BoneRightShoulderZ": 16,
+        "BoneHeadZ": 6,
+        "BoneLeftUpperArmZ": 6,
+        "BoneRightUpperArmZ": -6
+      },
+      "easeMs": 380
+    },
+    {
+      "id": "wave",
+      "label": "挥手",
+      "intent": "打招呼、告别",
+      "kind": "vrm",
+      "animation": "BoneLeftUpperArmZ=-62@240; BoneLeftUpperArmY=-12@240; BoneLeftLowerArmZ=-30@240; BoneLeftLowerArmY=-10@240; BoneHeadZ=5@240",
+      "easeMs": 320
+    },
+    {
+      "id": "bow",
+      "label": "鞠躬",
+      "intent": "道谢、致意、认输",
+      "kind": "vrm",
+      "params": {
+        "BoneHipsX": -6,
+        "BoneSpineX": -16,
+        "BoneChestX": -10,
+        "BoneNeckX": -8,
+        "BoneHeadX": -6
+      },
+      "easeMs": 700
+    },
+    {
+      "id": "hands_clasped",
+      "label": "双手交叠",
+      "intent": "礼貌、等待、听候吩咐",
+      "kind": "vrm",
+      "params": {
+        "BoneLeftUpperArmY": -80,
+        "BoneRightUpperArmY": 80,
+        "BoneLeftUpperArmZ": 18,
+        "BoneRightUpperArmZ": -18,
+        "BoneLeftLowerArmY": -34,
+        "BoneRightLowerArmY": 34,
+        "BoneLeftLowerArmZ": 46,
+        "BoneRightLowerArmZ": -46
+      },
+      "easeMs": 560
+    },
+    {
+      "id": "hands_up",
+      "label": "举手投降",
+      "intent": "认输、惊讶、别再问了",
+      "kind": "vrm",
+      "params": {
+        "BoneLeftUpperArmZ": -78,
+        "BoneRightUpperArmZ": 78,
+        "BoneLeftLowerArmZ": -18,
+        "BoneRightLowerArmZ": 18,
+        "BoneSpineX": 3
+      },
+      "easeMs": 400
+    },
+    {
+      "id": "point",
+      "label": "指向",
+      "intent": "指认、示意、找到线索",
+      "kind": "vrm",
+      "params": {
+        "BoneRightUpperArmY": 72,
+        "BoneRightUpperArmZ": 24,
+        "BoneRightLowerArmY": 8,
+        "BoneHeadY": -10,
+        "BoneNeckY": -5
+      },
+      "easeMs": 340
+    },
+    {
+      "id": "examine",
+      "label": "俯身查看",
+      "intent": "检查、翻看、凑近细瞧",
+      "kind": "vrm",
+      "params": {
+        "BoneHipsX": -7,
+        "BoneSpineX": -16,
+        "BoneChestX": -10,
+        "BoneNeckX": -8,
+        "BoneHeadX": -6,
+        "BoneLeftUpperArmY": -25
+      },
+      "easeMs": 600
+    },
+    {
+      "id": "crouch",
+      "label": "蹲下",
+      "intent": "躲藏、压低身子、捡东西",
+      "kind": "vrm",
+      "params": {
+        "BoneLeftUpperLegX": 85,
+        "BoneRightUpperLegX": 85,
+        "BoneLeftUpperLegZ": -30,
+        "BoneRightUpperLegZ": 30,
+        "BoneLeftLowerLegX": -160,
+        "BoneRightLowerLegX": -160,
+        "BoneLeftFootX": 25,
+        "BoneRightFootX": 25,
+        "BoneSpineX": -16,
+        "BoneChestX": -8,
+        "BoneNeckX": 12,
+        "BoneHeadX": 10,
+        "BoneLeftShoulderZ": 20,
+        "BoneRightShoulderZ": -20,
+        "BoneLeftUpperArmZ": 20,
+        "BoneRightUpperArmZ": -20,
+        "BoneLeftUpperArmY": -60,
+        "BoneRightUpperArmY": 60,
+        "BoneLeftLowerArmZ": 5,
+        "BoneRightLowerArmZ": -5
+      },
+      "translate": {
+        "hips": [
+          0,
+          -0.69,
+          0
+        ]
+      },
+      "easeMs": 750,
+      "note": "膝盖外开 30° 让膝盖露出裙摆，双手解到离膝 6.4 cm（手掌落在膝上）；头顶约为站立的 46%",
+      "checks": [
+        {
+          "type": "headHeightRatio",
+          "target": 0.46,
+          "tolerance": 0.08
+        },
+        {
+          "type": "footOnGround",
+          "max": 0.03
+        },
+        {
+          "type": "handToKnee",
+          "side": "left",
+          "max": 0.08
+        },
+        {
+          "type": "handToKnee",
+          "side": "right",
+          "max": 0.08
+        }
+      ]
+    },
+    {
+      "id": "double_yeah",
+      "label": "双手比耶",
+      "intent": "拍照、打招呼、得意",
+      "kind": "vrm",
+      "params": {
+        "BoneNeckZ": 3,
+        "BoneHeadX": 4,
+        "BoneLeftRingProximalZ": 55,
+        "BoneLeftRingIntermediateZ": 65,
+        "BoneLeftRingDistalZ": 45,
+        "BoneLeftLittleProximalZ": 55,
+        "BoneLeftLittleIntermediateZ": 65,
+        "BoneLeftLittleDistalZ": 45,
+        "BoneRightRingProximalZ": 55,
+        "BoneRightRingIntermediateZ": 65,
+        "BoneRightRingDistalZ": 45,
+        "BoneRightLittleProximalZ": 55,
+        "BoneRightLittleIntermediateZ": 65,
+        "BoneRightLittleDistalZ": 45,
+        "BoneLeftShoulderZ": -6,
+        "BoneRightShoulderZ": 6,
+        "BoneLeftUpperArmZ": 15,
+        "BoneRightUpperArmZ": -15,
+        "BoneLeftUpperArmY": -80,
+        "BoneRightUpperArmY": 80,
+        "BoneLeftLowerArmZ": -110,
+        "BoneRightLowerArmZ": 110,
+        "BoneLeftLowerArmY": -10,
+        "BoneRightLowerArmY": 10,
+        "BoneLeftHandX": 180,
+        "BoneLeftIndexProximalY": -15,
+        "BoneLeftMiddleProximalY": 15,
+        "BoneRightIndexProximalY": 15,
+        "BoneRightMiddleProximalY": -15,
+        "BoneLeftThumbMetacarpalX": -40,
+        "BoneLeftThumbMetacarpalY": 60,
+        "BoneLeftThumbProximalZ": 20,
+        "BoneLeftThumbProximalY": 30,
+        "BoneRightThumbMetacarpalX": 40,
+        "BoneRightThumbMetacarpalY": -60,
+        "BoneRightThumbProximalZ": 20,
+        "BoneRightThumbProximalY": -30
+      },
+      "easeMs": 520,
+      "note": "手举到脸颊两侧；左手腕沿自身 X 轴滚 180°（掌心朝内）；食指中指以 Y 轴反向 ±60° 在掌面内分开（指端侧向 7.3 cm）；拇指与其余两指收进掌心"
+    },
+    {
+      "id": "finger_ok",
+      "label": "食指穿 OK",
+      "intent": "逗趣、示意、开小玩笑",
+      "kind": "vrm",
+      "params": {
+        "BoneLeftUpperArmY": -97,
+        "BoneRightUpperArmY": 96,
+        "BoneLeftUpperArmZ": 23,
+        "BoneRightUpperArmZ": -28,
+        "BoneLeftLowerArmZ": -69,
+        "BoneRightLowerArmZ": 60,
+        "BoneLeftShoulderZ": -38,
+        "BoneRightShoulderZ": 14,
+        "BoneLeftMiddleProximalZ": 60,
+        "BoneLeftMiddleIntermediateZ": 70,
+        "BoneLeftMiddleDistalZ": 45,
+        "BoneLeftRingProximalZ": 60,
+        "BoneLeftRingIntermediateZ": 70,
+        "BoneLeftRingDistalZ": 45,
+        "BoneLeftLittleProximalZ": 60,
+        "BoneLeftLittleIntermediateZ": 70,
+        "BoneLeftLittleDistalZ": 45,
+        "BoneRightMiddleProximalZ": 60,
+        "BoneRightMiddleIntermediateZ": 70,
+        "BoneRightMiddleDistalZ": 45,
+        "BoneRightRingProximalZ": 60,
+        "BoneRightRingIntermediateZ": 70,
+        "BoneRightRingDistalZ": 45,
+        "BoneRightLittleProximalZ": 60,
+        "BoneRightLittleIntermediateZ": 70,
+        "BoneRightLittleDistalZ": 45,
+        "BoneRightIndexProximalZ": 87,
+        "BoneRightIndexIntermediateZ": 98,
+        "BoneRightIndexDistalZ": 10,
+        "BoneLeftThumbProximalZ": 25,
+        "BoneLeftThumbProximalY": 30,
+        "BoneRightThumbMetacarpalZ": 40,
+        "BoneRightThumbMetacarpalX": 60,
+        "BoneLeftHandX": 100,
+        "BoneLeftHandZ": 35,
+        "BoneRightIndexProximalY": -6,
+        "BoneRightThumbMetacarpalY": 6,
+        "BoneRightThumbProximalY": -6,
+        "BoneLeftLowerArmY": 8,
+        "BoneLeftIndexProximalY": -32,
+        "BoneLeftIndexProximalZ": 24,
+        "BoneLeftHandY": 20,
+        "BoneRightHandZ": 6,
+        "BoneRightLowerArmY": 0,
+        "BoneRightHandX": 12,
+        "BoneLeftLowerArmX": -3,
+        "BoneRightLowerArmX": 0,
+        "BoneRightHandY": -2
+      },
+      "easeMs": 700,
+      "note": "圈面朝侧面（法线 ≈ X），右手沿横向滑动 3.8 cm 套上/脱离左手食指；圈口 1.4 mm，指端离圈心 6.2 mm",
+      "animation": "BoneRightUpperArmY=96@0; BoneRightUpperArmZ=-28@0; BoneRightLowerArmZ=60@0; BoneRightLowerArmY=0@0; BoneRightLowerArmX=0@0; BoneRightHandX=12@0; BoneRightHandY=-2@0; BoneRightHandZ=6@0; BoneRightShoulderZ=14@0; BoneRightUpperArmY=90@900; BoneRightUpperArmZ=-30@900; BoneRightLowerArmZ=60@900; BoneRightLowerArmY=2@900; BoneRightLowerArmX=0@900; BoneRightHandX=12@900; BoneRightHandY=0@900; BoneRightHandZ=12@900; BoneRightShoulderZ=20@900; BoneRightUpperArmY=96@2000; BoneRightUpperArmZ=-28@2000; BoneRightLowerArmZ=60@2000; BoneRightLowerArmY=0@2000; BoneRightLowerArmX=0@2000; BoneRightHandX=12@2000; BoneRightHandY=-2@2000; BoneRightHandZ=6@2000; BoneRightShoulderZ=14@2000"
+    }
+  ]
+}
