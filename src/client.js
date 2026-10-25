@@ -1814,6 +1814,18 @@ async function startEngineInner() {
     await startVrmEngine(config)
     return
   }
+  // The model file must answer before the loader is handed its URL: one aborted request during a
+  // profile switch is reported by the loader as a hard failure and used to paint an error over
+  // the stage. Waiting here turns that into a short pause.
+  const ready = await waitForModelFile(config.selected.entryUrl)
+  if (!ready) {
+    showNotice('Live Tavern：模型文件还没能取到，稍后会自动重试。')
+    window.setTimeout(() => {
+      if (S.disposed || S.app !== null) return
+      void startEngine().catch(showError)
+    }, 2000)
+    return
+  }
   if (typeof window.Live2DCubismCore === 'undefined') {
     throw new Error('Cubism 运行时未加载：客户端产物里没有内联 live2dcubismcore。')
   }
@@ -4188,7 +4200,11 @@ function SettingsSection() {
  */
 async function fetchConfig() {
   let last
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  // The Host's HTTP surface comes up after the client module table is loaded: during a profile
+  // boot (`switch-back`, model switch) the first requests can fail with a network error. Retrying
+  // quietly for a while is the difference between "plugin broken" and "please wait" — and the
+  // mobile shell treats a throwing plugin activation as a failed boot.
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
       const config = await fetchJson(`${API}/config`)
       if (config !== null && typeof config === 'object' && config.selected === null && typeof config.error === 'string') {
@@ -4197,10 +4213,79 @@ async function fetchConfig() {
       return config
     } catch (error) {
       last = error
-      await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)))
+      if (document.visibilityState === 'hidden') {
+        // Reloading or switching away aborts in-flight requests; this is not a failure.
+        await new Promise(resolve => setTimeout(resolve, 500))
+        continue
+      }
+      await new Promise(resolve => setTimeout(resolve, 400))
     }
   }
   throw last
+}
+
+/**
+ * Wait until a model file can actually be fetched before handing its URL to the loader.
+ *
+ * The loader reports a status-0 request as a hard failure, and one aborted request during a
+ * profile switch used to paint an error over the stage and made the shell's boot probe give up.
+ *
+ * @param url - Same-origin URL of the model settings file.
+ * @returns True when the file answered; false when every attempt failed.
+ */
+async function waitForModelFile(url) {
+  if (typeof url !== 'string' || url === '') return false
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      const response = await fetch(url, { cache: 'no-store' })
+      // Drain a little so the connection can be reused, then drop the body.
+      try { await response.arrayBuffer() } catch { /* body is not needed */ }
+      if (response.ok) return true
+    } catch {
+      // Host not listening yet: wait and try again.
+    }
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  return false
+}
+
+/**
+ * Load the configuration once the Host answers, then mount the stage.
+ *
+ * Every failure here is quiet: a transient network error during boot is a "wait", and the stage
+ * retries when the layout watcher fires again. A real failure still reports through showNotice.
+ */
+async function boot() {
+  try {
+    S.config = await fetchConfig()
+  } catch (error) {
+    // Give up only after the retry window: the Host is not answering at all.
+    showNotice('Live Tavern：宿主没有响应（dsh web 可能还没起来），刷新页面会再试一次。')
+    reportStatus({ ok: false, error: String(error?.message ?? error) })
+    return
+  }
+  if (S.disposed) return
+  preloadVrm(S.config)
+  // Booting the stage must not hold up the plugin table: the shell may still
+  // be mounting, and the layout watcher starts it as soon as it can.
+  watchLayout()
+  void startEngine().catch((error) => {
+    // A status-0 fetch while the Host restarts is not a defect: retry once, then stay quiet
+    // unless the failure repeats.
+    const transient = /Network error|Failed to fetch|status 0/i.test(String(error?.message ?? error))
+    if (transient) {
+      window.setTimeout(() => {
+        if (S.disposed || S.app !== null || S.vrm !== null) return
+        void startEngine().catch((retryError) => {
+          showError(retryError)
+          reportStatus({ ok: false, error: String(retryError?.stack ?? retryError) })
+        })
+      }, 1500)
+      return
+    }
+    showError(error)
+    reportStatus({ ok: false, error: String(error?.stack ?? error) })
+  })
 }
 
 export async function apply(ctx) {
@@ -4220,8 +4305,11 @@ export async function apply(ctx) {
         order: 40,
       }, SettingsSection)))
     }
-    S.config = await fetchConfig()
+    // Activation itself must never wait on the Host: the shell's boot probe treats a slow or
+    // rejected plugin activation as a failed boot. Everything network-bound runs in boot(),
+    // which retries instead of throwing.
     S.layout = readLayout()
+    void boot()
     // Start the 17 MB download now, in parallel with waiting for the seat, so the
     // mask has real progress to show instead of an idle spinner.
     preloadVrm(S.config)

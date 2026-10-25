@@ -1037,6 +1037,24 @@ test('every settings field carries a value the form can read', async () => {
   harness.disposeAll()
 })
 
+test('a stray space in the pack path does not hide the model', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-space-'))
+  process.env.DSH_HOME = home
+  const pack = join(home, 'live2d', 'packs', 'ailian')
+  await mkdir(join(pack, 'model'), { recursive: true })
+  await writeFile(join(pack, 'model', 'ailian.model3.json'), JSON.stringify({ FileReferences: { Moc: 'a.moc3' } }))
+  // The folder chooser on the phone handed back a trailing space; the id must still resolve.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: `${pack} ` }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  const config = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/config'))).text)
+  assert.equal(config.selected.id, 'ailian')
+  assert.equal(config.packProblem, null)
+
+  harness.disposeAll()
+})
+
 test('a pack folder without a model is reported, not loaded', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-nomodel-'))
   process.env.DSH_HOME = home
