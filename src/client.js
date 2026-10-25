@@ -40,7 +40,6 @@ const FALLBACK_DEFAULTS = {
   springStrength: 1,
   springGravity: 0,
   showGround: false,
-  poseDwell: 900,
   widthCap: 0.6,
   memoryScope: 'session',
   sessionMaxFacts: 24,
@@ -1292,7 +1291,6 @@ async function startVrmEngine(config) {
         bone.node.rotation[bone.axis] = bone.rest + degrees * DEG
       }
     }
-    flushVrmPoseQueue(performance.now())
     const now = performance.now()
     if (stage.pendingChecks !== undefined && stage.pendingChecks !== null && now >= stage.pendingChecks.due) {
       const paused = stage.pendingChecks
@@ -1567,37 +1565,19 @@ function showVrmPose(pose) {
   for (const [name, value] of pinnedExpressions) stage.target.set(name, value)
   stage.exprPinned = new Map(pinnedExpressions)
   if (pose.animation !== '') startVrmTracks(pose.animation)
-  stage.poseShownAt = performance.now()
 }
 
 /**
- * Show a pose, or hold it back when the previous one has not been on screen long enough.
+ * Show a pose on the bones.
  *
- * Two tool calls in the same turn arrive milliseconds apart; without this the first pose is
- * replaced before the frame that draws it, so a sequence looks like one gesture.
+ * Frames are applied as they arrive: holding one back on a timer made a second action in the
+ * same turn look like it never happened.
+ *
+ * @param pose - Parsed pose, or null when the frame only changes the expression.
  */
 function applyVrmPose(pose) {
-  const stage = S.vrm
-  if (stage === null || pose === null) return
-  const dwell = Number(S.settings?.poseDwell ?? 900)
-  const since = performance.now() - (stage.poseShownAt ?? 0)
-  if (stage.poseShownAt !== undefined && since < dwell) {
-    stage.poseQueue = (stage.poseQueue ?? []).concat([pose])
-    // Keep the newest few: a long burst is worth its tail, not its head.
-    if (stage.poseQueue.length > 6) stage.poseQueue = stage.poseQueue.slice(-6)
-    return
-  }
+  if (pose === null) return
   showVrmPose(pose)
-}
-
-/** Advance the pose queue once the current pose has been visible long enough. */
-function flushVrmPoseQueue(now) {
-  const stage = S.vrm
-  if (stage === null || !Array.isArray(stage.poseQueue) || stage.poseQueue.length === 0) return
-  const dwell = Number(S.settings?.poseDwell ?? 900)
-  if (now - (stage.poseShownAt ?? 0) < dwell) return
-  const next = stage.poseQueue.shift()
-  if (next !== undefined) showVrmPose(next)
 }
 
 /** Read the frame's emotion and aim the expression weights at it. */
