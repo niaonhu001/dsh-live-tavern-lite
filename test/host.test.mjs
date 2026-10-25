@@ -1037,6 +1037,80 @@ test('every settings field carries a value the form can read', async () => {
   harness.disposeAll()
 })
 
+test('a pack folder without a model is reported, not loaded', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-nomodel-'))
+  process.env.DSH_HOME = home
+  const packs = join(home, 'live2d', 'packs')
+  // A folder that exists but holds no model file: the classic "picked the wrong folder" case.
+  const wrong = join(packs, 'wrong')
+  await mkdir(wrong, { recursive: true })
+  await writeFile(join(wrong, 'card.json'), JSON.stringify({ spec: 'chara_card_v2', data: { name: '空包' } }))
+  const good = join(packs, 'good')
+  await mkdir(join(good, 'model'), { recursive: true })
+  await writeFile(join(good, 'model', 'good.model3.json'), JSON.stringify({ FileReferences: { Moc: 'good.moc3' } }))
+
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'wrong' }))
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models') })
+  const config = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/config'))).text)
+  assert.equal(config.selected, null, 'a folder without a model must not be loaded')
+  assert.equal(config.stageKind, null)
+  assert.equal(config.packProblem.state, 'no-model')
+  assert.match(config.packProblem.hint, /没有模型文件/)
+
+  // A missing folder is its own reason.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'ghost' }))
+  const second = fakeContext()
+  apply(second.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models') })
+  const ghost = JSON.parse((await call(second.find('/dsh-live-tavern-lite/config'))).text)
+  assert.equal(ghost.selected, null)
+  assert.equal(ghost.packProblem.state, 'missing')
+
+  // The folder that does hold a model still works.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'good' }))
+  const third = fakeContext()
+  apply(third.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models') })
+  const ok = JSON.parse((await call(third.find('/dsh-live-tavern-lite/config'))).text)
+  assert.equal(ok.selected.id, 'good')
+  assert.equal(ok.packProblem, null)
+
+  harness.disposeAll()
+  second.disposeAll()
+  third.disposeAll()
+})
+
+test('the browser route lists folders and flags the ones holding a model', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-browse-'))
+  process.env.DSH_HOME = home
+  const packs = join(home, 'live2d', 'packs')
+  const withModel = join(packs, 'ailian')
+  await mkdir(join(withModel, 'model'), { recursive: true })
+  await writeFile(join(withModel, 'model', 'ailian.model3.json'), JSON.stringify({ FileReferences: { Moc: 'a.moc3' } }))
+  await mkdir(join(packs, 'empty'), { recursive: true })
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models') })
+
+  const browse = harness.find('/dsh-live-tavern-lite/browse')
+  assert.ok(browse !== undefined, 'the browser route is registered')
+  const root = JSON.parse((await call(browse, { url: `/dsh-live-tavern-lite/browse?path=${encodeURIComponent(packs)}` })).text)
+  const names = root.entries.map(entry => entry.name)
+  assert.deepEqual(names, ['ailian', 'empty'], 'model folders sort first, then by name')
+  assert.equal(root.entries[0].hasModel, true)
+  assert.equal(root.entries[1].hasModel, false)
+  assert.equal(root.self.hasModel, false)
+
+  // Descending into the pack finds the model.
+  const pack = JSON.parse((await call(browse, { url: `/dsh-live-tavern-lite/browse?path=${encodeURIComponent(withModel)}` })).text)
+  assert.equal(pack.self.hasModel, true)
+  assert.match(pack.self.entryFile, /model3\.json$/)
+
+  // Outside the configured roots is refused.
+  const outside = await call(browse, { url: '/dsh-live-tavern-lite/browse?path=C%3A%5CWindows' })
+  assert.equal(outside.statusCode, 403)
+
+  harness.disposeAll()
+})
+
 test('an empty pack path means no model, and the plugin stays idle', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-idle-'))
   process.env.DSH_HOME = home

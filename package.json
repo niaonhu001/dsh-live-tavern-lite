@@ -1,6 +1,6 @@
 {
   "name": "dsh-live-tavern-lite",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Live2D character stage for the DeepSeek Harness Web UI: chat-column background, foreground overlay and sidebar seats, same-origin model serving, LLM emotion control with a cross-session director, SillyTavern-style character cards and world books, and a settings page.",
   "keywords": [

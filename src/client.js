@@ -115,6 +115,20 @@ const CSS = `
 .dsh-l2d-set .wb .wbdrop{font-family:ui-monospace,monospace;font-size:11px;color:#a3968a;padding:2px 0}
 .dsh-l2d-set .wb .wbnone{font-size:12px;color:#a3968a;padding:4px 0}
 .dsh-l2d-set .pickrow{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;min-width:0}
+.dsh-l2d-set .pickstatus{display:block;margin-top:4px;font-size:11px;line-height:1.5;color:#777169}
+.dsh-l2d-set .pickstatus[data-state="bad"]{color:#a1553f}
+.dsh-l2d-set .pickstatus[data-state="good"]{color:#4f6b4a}
+.dsh-l2d-browse{position:fixed;inset:0;z-index:2147483000;background:rgba(24,18,12,.45);display:grid;place-items:center;padding:16px;box-sizing:border-box}
+.dsh-l2d-browse .panel{width:min(560px,100%);max-height:min(70vh,560px);display:grid;grid-template-rows:auto 1fr auto;background:#fffdfb;border:1px solid #e2dbd2;border-radius:14px;overflow:hidden;font:13px/1.6 ui-sans-serif,system-ui;color:#2b241d}
+.dsh-l2d-browse .head{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #eee7df;font-size:11.5px;color:#777169;word-break:break-all}
+.dsh-l2d-browse .list{overflow:auto;padding:4px}
+.dsh-l2d-browse .item{display:flex;gap:8px;align-items:center;width:100%;padding:7px 9px;border:0;border-radius:8px;background:transparent;text-align:left;font:12.5px/1.5 ui-sans-serif,system-ui;color:#2b241d;cursor:pointer}
+.dsh-l2d-browse .item:hover{background:#f5f1ec}
+.dsh-l2d-browse .item[data-model="1"]{font-weight:600}
+.dsh-l2d-browse .flag{font-size:10px;color:#4f6b4a;border:1px solid #cddcc7;border-radius:999px;padding:0 6px}
+.dsh-l2d-browse .foot{display:flex;gap:8px;justify-content:flex-end;padding:10px 12px;border-top:1px solid #eee7df}
+.dsh-l2d-browse button{font:12px/1 ui-sans-serif,system-ui;padding:7px 12px;border-radius:8px;border:1px solid rgba(78,50,23,.18);background:#faf7f4;color:#2b241d;cursor:pointer}
+.dsh-l2d-browse button.primary{background:#8a5a2b;border-color:#8a5a2b;color:#fff}
 .dsh-l2d-set button.pick{padding:6px 10px;font-size:11.5px;white-space:nowrap}
 .dsh-l2d-set button.pick:disabled{opacity:.6;cursor:default}
 .dsh-l2d-set input[type=text],.dsh-l2d-set input[type=number],.dsh-l2d-set select{font:12px/1.4 ui-sans-serif,system-ui;padding:6px 8px;border-radius:8px;border:1px solid rgba(78,50,23,.18);background:#fff;color:#2b241d;width:100%;min-width:0}
@@ -2651,6 +2665,88 @@ async function mountSettingsForm(container) {
 }
 
 /**
+ * Walk the filesystem for a folder, without a native dialog.
+ *
+ * The Android WebView has neither the File System Access API nor a system folder chooser, so the
+ * settings page renders its own list from the Host's `/browse` route. Directories that already hold
+ * a model are flagged, because that is what makes one selectable as a pack.
+ *
+ * @param startPath - Directory to open first; empty starts at the Host's first root.
+ * @param onPick - Called with the chosen absolute path.
+ */
+function openPackBrowser(startPath, onPick) {
+  const overlay = el('div', { class: 'dsh-l2d-browse' })
+  const head = el('div', { class: 'head' })
+  const list = el('div', { class: 'list' })
+  const foot = el('div', { class: 'foot' })
+  const panel = el('div', { class: 'panel' }, [head, list, foot])
+  overlay.append(panel)
+  const up = el('button', { type: 'button', text: '上一级' })
+  const choose = el('button', { type: 'button', class: 'primary', text: '用这个文件夹' })
+  const cancel = el('button', { type: 'button', text: '取消' })
+  foot.append(up, choose, cancel)
+  let current = startPath ?? ''
+  let selfHasModel = false
+  const close = () => overlay.remove()
+  const load = async (path) => {
+    list.textContent = ''
+    const answer = await fetchJson(`${API}/browse?path=${encodeURIComponent(path ?? '')}`)
+    if (answer?.error !== undefined) {
+      head.textContent = answer.error
+      return
+    }
+    current = answer.path
+    head.textContent = answer.path
+    selfHasModel = answer.self?.hasModel === true
+    choose.textContent = selfHasModel ? '用这个文件夹' : '没有模型，仍要用'
+    up.disabled = answer.parent === null || answer.parent === undefined
+    up.onclick = () => { if (answer.parent) void load(answer.parent) }
+    for (const entry of answer.entries ?? []) {
+      const row = el('button', { class: 'item', type: 'button' })
+      row.dataset.model = entry.hasModel ? '1' : '0'
+      row.append(el('span', { text: entry.name }))
+      if (entry.hasModel) row.append(el('span', { class: 'flag', text: entry.kind === 'vrm' ? 'VRM' : '模型' }))
+      row.onclick = () => { void load(entry.path) }
+      list.append(row)
+    }
+    if ((answer.entries ?? []).length === 0) list.append(el('div', { class: 'head', text: '（这里没有子文件夹）' }))
+  }
+  choose.onclick = () => {
+    if (current !== '') onPick(current)
+    close()
+  }
+  cancel.onclick = close
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close() })
+  document.body.append(overlay)
+  void load(startPath ?? '')
+}
+
+/** Show whether a path the field holds actually contains a model. */
+async function refreshPackStatus(status, value) {
+  if (value === '' || value === 'off') {
+    status.textContent = ''
+    status.dataset.state = ''
+    return
+  }
+  try {
+    const answer = await fetchJson(`${API}/browse?path=${encodeURIComponent(value)}`)
+    if (answer?.self?.hasModel === true) {
+      status.textContent = `已找到模型：${answer.self.entryFile}`
+      status.dataset.state = 'good'
+    } else if (answer?.path !== undefined) {
+      status.textContent = '这个文件夹里没有模型文件（需要 .model3.json 或 .vrm）'
+      status.dataset.state = 'bad'
+    } else {
+      status.textContent = answer?.error ?? ''
+      status.dataset.state = 'bad'
+    }
+  } catch {
+    status.textContent = ''
+    status.dataset.state = ''
+  }
+}
+
+/**
  * Build one settings control.
  *
  * @returns The element to mount and a setter used by the reset button, so a
@@ -2703,8 +2799,11 @@ function buildControl(field, value, onChange) {
   if (field.pick !== 'directory') {
     return { node: input, set: (next) => { input.value = String(next ?? '') } }
   }
-  // A path on this machine cannot be typed from memory and a browser directory
-  // input only reveals file names, so the Host's own chooser supplies it.
+  // Two ways to name a folder: the Host's native chooser when it has one, and the plugin's own
+  // browser otherwise (the Android WebView has neither a system dialog nor the File System
+  // Access API). The status line says whether the folder actually holds a model.
+  const status = el('span', { class: 'pickstatus' })
+  const row = el('div', { class: 'pickrow' })
   const browse = el('button', {
     class: 'pick',
     text: '浏览…',
@@ -2712,25 +2811,21 @@ function buildControl(field, value, onChange) {
     onclick: async (event) => {
       event.preventDefault()
       browse.disabled = true
-      // Ask first: a probe reports the chooser without opening one, so a refusal
-      // can say why instead of flashing a generic label.
+      let native = false
       try {
         const probe = await fetchJson(`${API}/directory?probe=1`)
-        if (probe?.canPick !== true) {
-          browse.title = probe?.kind === undefined || probe.kind === 'none'
-            ? '宿主没有可用的目录选择服务'
-            : `当前宿主用浏览器内目录浏览（${probe.kind}），弹不出系统对话框`
-          browse.textContent = '不可用'
-          window.setTimeout(() => { browse.textContent = '浏览…' }, 2200)
-          return
-        }
-      } catch (error) {
-        browse.title = error?.message ?? String(error)
-        browse.textContent = '不可用'
-        window.setTimeout(() => { browse.textContent = '浏览…' }, 2200)
+        native = probe?.canPick === true
+      } catch {
+        native = false
+      }
+      browse.disabled = false
+      if (!native) {
+        openPackBrowser(input.value === '' ? '' : input.value, (picked) => {
+          input.value = picked
+          onChange(picked)
+          void refreshPackStatus(status, picked)
+        })
         return
-      } finally {
-        browse.disabled = false
       }
       browse.disabled = true
       try {
@@ -2738,6 +2833,7 @@ function buildControl(field, value, onChange) {
         if (typeof result?.path === 'string' && result.path !== '') {
           input.value = result.path
           onChange(result.path)
+          void refreshPackStatus(status, result.path)
         }
       } catch (error) {
         browse.textContent = '选不了'
@@ -2748,9 +2844,16 @@ function buildControl(field, value, onChange) {
       }
     },
   })
-  const wrap = el('div', { class: 'pickrow' })
-  wrap.append(input, browse)
-  return { node: wrap, set: (next) => { input.value = String(next ?? '') } }
+  row.append(input, browse)
+  const node = el('div', {}, [row, status])
+  void refreshPackStatus(status, input.value)
+  return {
+    node,
+    set: (next) => {
+      input.value = String(next ?? '')
+      void refreshPackStatus(status, input.value)
+    },
+  }
 }
 
 /**
