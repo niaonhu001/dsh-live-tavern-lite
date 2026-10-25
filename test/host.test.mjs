@@ -1038,7 +1038,7 @@ test('every settings field carries a value the form can read', async () => {
 })
 
 test('VRM-only settings are hidden while a Live2D model is mounted', async () => {
-  const vrmOnly = ['springGravity', 'springStrength', 'showGround']
+  const vrmOnly = ['springGravity', 'springStrength']
 
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-kinds-'))
   process.env.DSH_HOME = home

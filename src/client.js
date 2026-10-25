@@ -39,7 +39,6 @@ const FALLBACK_DEFAULTS = {
   hitBoxScale: 1,
   springStrength: 1,
   springGravity: 0,
-  showGround: false,
   widthCap: 0.6,
   memoryScope: 'session',
   sessionMaxFacts: 24,
@@ -1158,8 +1157,11 @@ async function startVrmEngine(config) {
   }
 
   /**
-   * Add the floor plane and its grid once the model is scaled, so the stage has an actual
-   * ground the avatar stands on instead of an invisible constraint.
+   * Derive the scale-dependent physics constants once the model is fitted.
+   *
+   * There is no visible ground: the stage background is the ground, and a dark plane behind her
+   * legs reads as a stray black line. Landing still needs a measured foot height, which
+   * `floorY` holds.
    *
    * @param stage - The running VRM stage.
    */
@@ -1168,25 +1170,8 @@ async function startVrmEngine(config) {
     const root = stage.vrm?.scene
     if (root === undefined || root === null || stage.baseSize === undefined) return
     const scale = Math.abs(root.scale.x) || 1
-    const width = Math.max(stage.baseSize.x * scale * 2.6, stage.baseSize.y * scale * 1.3, 1)
-    // Include the drag pivot: the floor follows the avatar wherever she is placed.
-    const y = (stage.pivot?.position.y ?? 0) + root.position.y + stage.baseBottom * scale
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(width, width),
-      new THREE.MeshBasicMaterial({ color: 0x24242a, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }),
-    )
-    floor.rotation.x = -Math.PI / 2
-    floor.position.set(root.position.x, y, 0)
-    // Off by default: a dark plane behind her legs reads as a stray black line, and the
-    // stage's own background is the ground. `showGround` brings it back for inspection.
-    floor.visible = S.config?.showGround === true
-    stage.scene.add(floor)
-    const grid = new THREE.GridHelper(width, 24, 0x5c5c68, 0x3a3a42)
-    grid.position.set(root.position.x, y + 0.0005 * width, 0)
-    grid.visible = floor.visible
-    stage.scene.add(grid)
-    stage.floor = floor
-    stage.floorGrid = grid
+    stage.floor = null
+    stage.floorGrid = null
     // floorY stays null until the first frame measures a foot; the bounding box bottom is
     // not the sole of the shoe, and using it made her hover and twitch on every frame.
     stage.floorY = null
@@ -1264,10 +1249,6 @@ async function startVrmEngine(config) {
       if (root !== undefined && root !== null) {
         root.position.x = Number(stage.moveX ?? 0)
         root.position.z = Number(stage.moveZ ?? 0)
-        if (stage.floor !== undefined && stage.floor !== null) {
-          stage.floor.position.x = root.position.x
-          stage.floorGrid.position.x = root.position.x
-        }
       }
     }
     if (stage.hips !== null && stage.hips !== undefined && stage.hipsRest !== null && stage.hipsRest !== undefined) {
@@ -1347,10 +1328,6 @@ async function startVrmEngine(config) {
       if (lowest !== null && stage.floorY === null) {
         // The floor is exactly where her feet stood on the first frame that had a pose.
         stage.floorY = lowest
-        if (stage.floor !== undefined) {
-          stage.floor.position.y = lowest
-          stage.floorGrid.position.y = lowest + deadZone * 0.4
-        }
       }
       if (lowest !== null && stage.floorY !== null) {
         if (lowest < stage.floorY - deadZone) {
@@ -2503,9 +2480,6 @@ async function refreshDisplayConfig() {
   }
   if (S.kind === 'vrm') {
     // The 3D stage has no Live2D placements, rig or texture levels to refresh.
-    const ground = S.config?.showGround === true
-    if (S.vrm?.floor !== undefined) S.vrm.floor.visible = ground
-    if (S.vrm?.floorGrid !== undefined) S.vrm.floorGrid.visible = ground
     applySpringStrength(S.vrm)
     fitVrm()
     return
