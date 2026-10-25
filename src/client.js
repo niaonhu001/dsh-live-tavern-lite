@@ -39,6 +39,7 @@ const FALLBACK_DEFAULTS = {
   hitBoxScale: 1,
   springStrength: 1,
   springGravity: 0,
+  showGround: false,
   poseDwell: 900,
   widthCap: 0.6,
   memoryScope: 'session',
@@ -1177,9 +1178,13 @@ async function startVrmEngine(config) {
     )
     floor.rotation.x = -Math.PI / 2
     floor.position.set(root.position.x, y, 0)
+    // Off by default: a dark plane behind her legs reads as a stray black line, and the
+    // stage's own background is the ground. `showGround` brings it back for inspection.
+    floor.visible = S.config?.showGround === true
     stage.scene.add(floor)
     const grid = new THREE.GridHelper(width, 24, 0x5c5c68, 0x3a3a42)
     grid.position.set(root.position.x, y + 0.0005 * width, 0)
+    grid.visible = floor.visible
     stage.scene.add(grid)
     stage.floor = floor
     stage.floorGrid = grid
@@ -2518,6 +2523,9 @@ async function refreshDisplayConfig() {
   }
   if (S.kind === 'vrm') {
     // The 3D stage has no Live2D placements, rig or texture levels to refresh.
+    const ground = S.config?.showGround === true
+    if (S.vrm?.floor !== undefined) S.vrm.floor.visible = ground
+    if (S.vrm?.floorGrid !== undefined) S.vrm.floorGrid.visible = ground
     applySpringStrength(S.vrm)
     fitVrm()
     return
