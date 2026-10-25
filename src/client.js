@@ -38,6 +38,7 @@ const FALLBACK_DEFAULTS = {
   lookAtPointer: false,
   hitBoxScale: 1,
   springStrength: 1,
+  vrmStage: 'auto',
   springGravity: 0,
   widthCap: 0.6,
   memoryScope: 'session',
@@ -1761,6 +1762,12 @@ async function startEngineInner() {
     return
   }
   if (config.stageKind === 'vrm') {
+    // The Host drops VRM packs where the 3D stage cannot run (Android); a stale page that still
+    // carries one says why instead of trying to build a WebGL scene that will not work.
+    if (config.vrmSupported === false) {
+      showError(new Error('当前环境不支持 VRM 舞台（安卓端只跑 Live2D）。换一个 Live2D 角色包，或到桌面端使用 3D 模型。'))
+      return
+    }
     await startVrmEngine(config)
     return
   }

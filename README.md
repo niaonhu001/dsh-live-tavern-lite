@@ -13,6 +13,24 @@
 - [HTTP 路由](#http-路由)
 - [开发](#开发)
 
+## 安卓端（DSH for Android）
+
+插件会自己认出安卓：宿主的 `process.platform === 'android'`（Android 上的 Node 报的是这个值，不是 `linux`）。
+
+认出之后，**VRM 相关的功能整体不存在**，而不是「装上了但一按就报错」：
+
+| 位置 | 安卓端行为 |
+| --- | --- |
+| 模型列表 | VRM 角色包不出现；若设置里还指着某个 VRM 包，回退到第一个可用 Live2D 模型并回报 `vrmDropped` |
+| 工具 | `live2d_act` 的 `recipe` 只认 Live2D 侧配方，`double_yeah` / `crouch` 这类 3D 配方不会被解析 |
+| 提示词 | 配方表里不列 3D 姿势，模型无从点名 |
+| 设置页 | 物理重力、物理强度这两个 spring-bone 开关消失（只跟 three-vrm 有关） |
+| 客户端 | 万一页面还带着 VRM 选择，直接给出「当前环境不支持 VRM 舞台」而不是硬建一个 WebGL 场景 |
+
+想在没有 3D 环境的机器上手工关掉，也可以写 `settings.json`：`{"vrmStage": "off"}`（默认 `auto`，即按平台判断）。
+
+**安装层面**：three / @pixiv/three-vrm 是 `devDependencies`，只在打包时把代码内联进 `lib/client.js`；从 npm 安装本插件**不会**拉取任何 3D 依赖，安卓端也不会有它们的安装记录。
+
 ## 安装
 
 插件由两半组成：宿主模块管状态、记忆与路由，浏览器模块负责渲染舞台。

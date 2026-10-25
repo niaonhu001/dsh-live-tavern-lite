@@ -1037,6 +1037,44 @@ test('every settings field carries a value the form can read', async () => {
   harness.disposeAll()
 })
 
+test('a runtime without the 3D stage offers no VRM at all', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-no3d-'))
+  process.env.DSH_HOME = home
+  const packs = join(home, 'live2d', 'packs')
+
+  const live = join(packs, 'live')
+  await mkdir(live, { recursive: true })
+  await writeFile(join(live, 'live.model3.json'), JSON.stringify({ FileReferences: { Moc: 'live.moc3' } }))
+
+  const three = join(packs, 'three')
+  await mkdir(three, { recursive: true })
+  await writeFile(join(three, 'three.vrm'), Buffer.from('glTF'))
+  // The stale selection points at the VRM pack, exactly like an install that upgraded to a phone.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'three' }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models'), vrmStage: 'off' })
+
+  const config = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/config'))).text)
+  assert.equal(config.vrmSupported, false)
+  assert.deepEqual(config.models.map(model => model.id), ['live'], 'the VRM pack must not be offered')
+  assert.equal(config.stageKind, 'live2d', 'the stage falls back instead of failing to boot')
+  assert.equal(config.vrmDropped, 'three', 'the dropped pack is reported, not silently forgotten')
+
+  // The prompt must not teach a 3D gesture vocabulary the stage cannot perform.
+  const section = harness.sections.find(entry => entry.name === 'tool:live2d')
+  const promptText = typeof section.text === 'function' ? section.text({}) : section.text
+  assert.doesNotMatch(promptText, /double_yeah/)
+  assert.match(promptText, /live2d_act/)
+
+  // And a 3D recipe id is not resolved even when the model asks for it by name.
+  const tool = harness.tools.find(entry => entry.name === 'live2d_act')
+  const answer = await tool.execute({ recipe: 'nod' }, {})
+  assert.equal(answer.recipe, undefined, 'a VRM recipe must not apply here')
+
+  harness.disposeAll()
+})
+
 test('VRM-only settings are hidden while a Live2D model is mounted', async () => {
   const vrmOnly = ['springGravity', 'springStrength']
 
