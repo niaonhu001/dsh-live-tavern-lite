@@ -29,6 +29,13 @@
 
 想在没有 3D 环境的机器上手工关掉，也可以写 `settings.json`：`{"vrmStage": "off"}`（默认 `auto`，即按平台判断）。
 
+移动端还少两样东西，都由同一个平台判断决定：
+
+- **座位只剩两个**：聊天区底部（`chat`）与前景浮层（`foreground`）。桌面配置里存的 `sidebar` 在手机上会被丢弃而不是报错——副栏在手机壳里没有锚点。
+- **没有参数工作台**：`/params` 与 `/rig/generate` 在移动端直接返回 404，设置页也不再出现「打开参数工作台」入口。
+
+两点都可以用 `settings.json` 的 `"mobileUi": "on"` 在桌面端强行模拟。
+
 **安装层面**：three / @pixiv/three-vrm 是 `devDependencies`，只在打包时把代码内联进 `lib/client.js`；从 npm 安装本插件**不会**拉取任何 3D 依赖，安卓端也不会有它们的安装记录。
 
 ## 安装

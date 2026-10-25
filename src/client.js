@@ -39,6 +39,7 @@ const FALLBACK_DEFAULTS = {
   hitBoxScale: 1,
   springStrength: 1,
   vrmStage: 'auto',
+  mobileUi: 'auto',
   springGravity: 0,
   widthCap: 0.6,
   memoryScope: 'session',
@@ -2616,7 +2617,9 @@ async function mountSettingsForm(container) {
   )
   container.append(mountLayoutBlock())
   container.append(mountWorldbookBlock())
-  container.append(mountWorkbenchLauncher())
+  // The workbench is a three-pane desktop editor; the phone shell has no room for it and the
+  // Host does not serve its routes there.
+  if (S.config?.capabilities?.workbench !== false) container.append(mountWorkbenchLauncher())
 }
 
 /**

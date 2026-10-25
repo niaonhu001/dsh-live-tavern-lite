@@ -1037,6 +1037,46 @@ test('every settings field carries a value the form can read', async () => {
   harness.disposeAll()
 })
 
+test('the mobile runtime keeps two seats and no workbench', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-mobile-'))
+  process.env.DSH_HOME = home
+  const pack = join(home, 'live2d', 'packs', 'live')
+  await mkdir(pack, { recursive: true })
+  await writeFile(join(pack, 'live.model3.json'), JSON.stringify({ FileReferences: { Moc: 'live.moc3' } }))
+  // Sidebar is still requested in the stored settings: the mobile runtime ignores it.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'live', placement: ['sidebar', 'chat'] }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models'), mobileUi: 'on' })
+
+  const config = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/config'))).text)
+  assert.deepEqual(config.placement, ['chat'], 'sidebar is dropped, and a resolved seat remains')
+  assert.equal(config.capabilities.workbench, false)
+  assert.deepEqual(config.capabilities.placements, ['chat'])
+
+  const settings = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/settings'))).text)
+  const placement = settings.fields.find(field => field.key === 'placement')
+  assert.ok(placement !== undefined)
+  assert.deepEqual(placement.options, ['chat', 'foreground'])
+
+  // The workbench routes are not part of the mobile surface.
+  const params = await call(harness.find('/dsh-live-tavern-lite/params'))
+  assert.equal(params.statusCode, 404)
+  const rig = await call(harness.find('/dsh-live-tavern-lite/rig/generate'), { method: 'POST' })
+  assert.equal(rig.statusCode, 404)
+
+  harness.disposeAll()
+})
+
+test('resolvePlacement refuses sidebar on the mobile runtime', () => {
+  assert.deepEqual(internals.resolvePlacement('chat,foreground', true), ['chat', 'foreground'])
+  // A desktop profile that asked for a sidebar still boots on a phone: the seat is dropped.
+  assert.deepEqual(internals.resolvePlacement('sidebar', true), ['chat'])
+  assert.deepEqual(internals.resolvePlacement('sidebar,foreground', true), ['foreground'])
+  assert.deepEqual(internals.resolvePlacement('sidebar', false), ['sidebar'])
+  assert.throws(() => internals.resolvePlacement('foo', true), /placement entries must be one of/)
+})
+
 test('a runtime without the 3D stage offers no VRM at all', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-no3d-'))
   process.env.DSH_HOME = home
