@@ -620,13 +620,17 @@ test('parameter notes round-trip and are validated', async () => {
 test('an absolute model or pack path names that folder', async () => {
   const root = await fixtureModels()
   const modelPath = join(root, 'demo')
-  const withPath = internals.resolveConfig({ model: modelPath, pack: join(root, 'packs', 'demo') })
-  // A path names the folder itself: its parent is the root, its last segment the id.
+  const packPath = join(root, 'packs', 'demo')
+  const withPath = internals.resolveConfig({ model: modelPath, pack: packPath })
+  // A model path names the folder itself: its parent is the models root, its last segment the id.
   assert.equal(withPath.modelsRoot, root)
   assert.equal(withPath.model, 'demo')
   assert.equal(withPath.modelRaw, modelPath)
-  assert.equal(withPath.packsRoot, join(root, 'packs'))
+  // A pack path names ONE folder; its parent is not a packs root, or every neighbour folder in
+  // the download directory would be scanned as a character card.
+  assert.equal(withPath.packPath, packPath)
   assert.equal(withPath.pack, 'demo')
+  assert.notEqual(withPath.packsRoot, join(root, 'packs'))
 
   // A bare name keeps resolving against the default roots.
   const withName = internals.resolveConfig({ modelsRoot: root, model: 'demo' })

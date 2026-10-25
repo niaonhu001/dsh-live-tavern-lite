@@ -276,26 +276,31 @@ function el(tag, props = {}, children = []) {
 }
 
 /** A one-line notice instead of a stack: the common failure has a known cause. */
+/**
+ * Report a degraded state without drawing over the page.
+ *
+ * An overlay used to be appended to `body` at a z-index above every shell layer. On a phone that
+ * is not a hint, it is a red box covering the whole chat — and it fired for transient startup
+ * failures too. The console keeps the detail; the settings page and /status carry the state.
+ *
+ * @param text - One line for the console and for the status endpoint.
+ */
 function showNotice(text) {
-  let box = document.querySelector('.dsh-l2d-error')
-  if (box === null) {
-    box = el('div', { class: 'dsh-l2d-error' })
-    document.body.append(box)
-  }
-  box.textContent = `dsh-live-tavern: ${text}`
+  S.lastNotice = String(text)
   console.warn('[dsh-live-tavern]', text)
+  reportStatus({ ok: false, error: String(text) })
 }
 
+/**
+ * Record a failure for diagnostics, never paint it over the UI.
+ *
+ * @param error - The failure to record.
+ */
 function showError(error) {
   S.error = error
   const message = error && error.stack ? error.stack : String(error)
   console.error('[dsh-live-tavern-lite]', error)
-  let box = document.querySelector('.dsh-l2d-error')
-  if (box === null) {
-    box = el('div', { class: 'dsh-l2d-error' })
-    document.body.append(box)
-  }
-  box.textContent = `dsh-live-tavern: ${message}`
+  reportStatus({ ok: false, error: message })
 }
 
 async function fetchJson(url, init) {
@@ -443,7 +448,13 @@ function fitModel() {
   const baseHeight = S.baseHeight || 1
   const visibleWidth = baseWidth * rel.width
   const capRatio = Number(S.config?.widthCap)
-  const maxWidth = width * (Number.isFinite(capRatio) ? Math.min(1, Math.max(0.2, capRatio)) : 0.6)
+  // On a phone the viewport is narrow and the artwork is not: a width cap always won there, so
+  // the height slider moved nothing. The phone shell lets height decide and crops the sides,
+  // which is what a viewer filling the screen looks like anyway.
+  const phoneShell = S.config?.capabilities?.workbench === false
+  const maxWidth = phoneShell
+    ? width * 1.6
+    : width * (Number.isFinite(capRatio) ? Math.min(1, Math.max(0.2, capRatio)) : 0.6)
   // Height sets the size exactly as before; width only ever shrinks it. A wide
   // illustration therefore stops at the cap instead of covering the conversation,
   // while a normal portrait keeps the size the user already tuned.
@@ -1798,6 +1809,9 @@ function stageIdle() {
 
 async function startEngineInner() {
   const config = S.config
+  // The configuration arrives asynchronously; a start attempt that lands first is a no-op, not a
+  // TypeError on a null config.
+  if (config === null || config === undefined) return
   if (!config.selected) {
     // An empty pack path means no model configured: the plugin stays out of the page instead of
     // painting an error over a UI the player did not ask for a character for.

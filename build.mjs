@@ -33,7 +33,40 @@ const result = await build({
   logLevel: 'info',
 })
 
-const bundled = result.outputFiles[0].text
+let bundled = result.outputFiles[0].text
+
+/**
+ * Fold the model's own transform into the matrix Cubism is given.
+ *
+ * The bundled Live2D engine computes the model's world matrix from the render group's uniform
+ * and its own `groupTransform`, and on some runtimes (the Android WebView among them) neither
+ * carries the model's local scale/translation. Cubism then receives a unit matrix and draws its
+ * -1..1 normalised vertices as pixels: a model under one pixel tall, no error, nothing on screen.
+ * The degenerate matrix is unambiguous, so it is repaired here rather than by forking the engine.
+ *
+ * @param source - Bundled client artifact.
+ * @returns Artifact with the repair applied, and the number of sites changed.
+ */
+function repairLive2dWorldMatrix(source) {
+  const needle = 'const adjustedWorld = tempWorldMatrix.copyFrom(worldTransformMatrix).append(this.groupTransform);'
+  const replacement = [
+    'const adjustedWorld = tempWorldMatrix.copyFrom(worldTransformMatrix).append(this.groupTransform);',
+    '// dsh-live-tavern: a group transform with no scale means the local transform was never folded',
+    '// in, which makes Cubism draw a one-pixel model. Apply it only in that degenerate case.',
+    'if (Math.abs(adjustedWorld.a) < 1e-3 && Math.abs(adjustedWorld.d) < 1e-3) adjustedWorld.append(this.localTransform);',
+  ].join('\n')
+  const count = source.split(needle).length - 1
+  return { text: count === 0 ? source : source.split(needle).join(replacement), count }
+}
+
+const repaired = repairLive2dWorldMatrix(bundled)
+bundled = repaired.text
+if (repaired.count === 0) {
+  console.warn('client: Live2D world-matrix repair did not apply (engine source changed?)')
+} else {
+  console.log(`client: Live2D world-matrix repair applied to ${repaired.count} render path(s)`)
+}
+
 const core = await readFile(coreSource, 'utf8')
 
 // The Cubism runtime is a classic script that publishes `Live2DCubismCore` as a
