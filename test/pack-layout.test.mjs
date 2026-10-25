@@ -81,7 +81,8 @@ async function call(route) {
 test('a pack holds its model, and everything else may be missing', async () => {
   const { packsRoot, modelsRoot } = await unifiedPack()
   const harness = fakeContext()
-  apply(harness.ctx, { packsRoot, modelsRoot })
+  // The pack path is what selects the model; an empty one means no stage at all.
+  apply(harness.ctx, { packsRoot, modelsRoot, pack: 'ailian' })
 
   const config = harness.routes.find(route => route.path.endsWith('/config'))
   const answer = await call(config)
@@ -100,7 +101,7 @@ test('pack files sit beside the model, and legacy files still read', async () =>
   await writeFile(join(pack, 'card.json'), JSON.stringify({ spec: 'chara_card_v2', data: { name: '艾莲' } }))
   await writeFile(join(pack, 'params.json'), JSON.stringify({ version: 1, params: { ParamAngleX: { note: '头左右', verified: true } } }))
   const harness = fakeContext()
-  apply(harness.ctx, { packsRoot, modelsRoot })
+  apply(harness.ctx, { packsRoot, modelsRoot, pack: 'ailian' })
 
   const params = harness.routes.find(route => route.path.endsWith('/params'))
   const answer = await call(params)
@@ -120,7 +121,7 @@ test('a broken rig table or pack does not take /config down', async () => {
   await writeFile(join(pack, 'rig.json'), '{ not json')
 
   const harness = fakeContext()
-  apply(harness.ctx, { packsRoot, modelsRoot })
+  apply(harness.ctx, { packsRoot, modelsRoot, pack: 'ailian' })
   const config = harness.routes.find(route => route.path.endsWith('/config'))
   const answer = await call(config)
   assert.equal(answer.status, 200)
@@ -152,7 +153,7 @@ test('a pack that holds only a VRM is a character', async () => {
   await writeFile(join(pack, 'card.json'), JSON.stringify({ spec: 'chara_card_v2', data: { name: '小肥鱼' } }))
 
   const harness = fakeContext()
-  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models'), pack: 'whale' })
   const config = harness.routes.find(route => route.path.endsWith('/config'))
   const answer = await call(config)
   assert.equal(answer.status, 200)

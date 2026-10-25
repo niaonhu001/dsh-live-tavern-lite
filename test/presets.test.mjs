@@ -91,7 +91,8 @@ test('a saved preset becomes a usable emotion id', async () => {
   const { pack } = await packFixture()
   const harness = fakeContext()
   // The control tool only speaks with the cross-session mode off.
-  apply(harness.ctx, { director: false })
+  // The pack path selects the model; without it the plugin is idle by design.
+  apply(harness.ctx, { pack: 'ailian', director: false })
   const route = harness.routes.find(entry => entry.path.endsWith('/presets'))
   assert.ok(route !== undefined, 'the route is registered')
 
@@ -132,7 +133,7 @@ test('a saved preset becomes a usable emotion id', async () => {
 test('a bad preset list is refused before anything is written', async () => {
   const { pack } = await packFixture()
   const harness = fakeContext()
-  apply(harness.ctx, {})
+  apply(harness.ctx, { pack: 'ailian' })
   const route = harness.routes.find(entry => entry.path.endsWith('/presets'))
   const bad = await call(route, { method: 'POST', body: JSON.stringify({ presets: [{ id: '9nope' }] }) })
   assert.equal(bad.status, 400)
@@ -152,7 +153,7 @@ test('a custom preset is offered as a default pose and can be saved as one', asy
   process.env.DSH_HOME = home
 
   const harness = fakeContext()
-  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models'), pack: 'whale' })
 
   const params = harness.routes.find(entry => entry.path.endsWith('/params'))
   const listed = JSON.parse((await call(params)).text)

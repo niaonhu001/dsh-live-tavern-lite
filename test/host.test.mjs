@@ -220,7 +220,7 @@ async function call(route, options) {
 test('config enumerates models, expressions and motion groups', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root, placement: 'chat,sidebar' })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', placement: 'chat,sidebar' })
 
   const response = await call(harness.find('/dsh-live-tavern-lite/config'))
   assert.equal(response.statusCode, 200)
@@ -237,7 +237,7 @@ test('config enumerates models, expressions and motion groups', async () => {
 test('model prefix route serves settings, textures and rejects escapes', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const models = harness.find('/dsh-live-tavern-lite/models')
   assert.equal(models.kind, 'prefix')
 
@@ -275,7 +275,7 @@ test('core route serves the Cubism runtime as JavaScript', async () => {
 test('binding round-trips through the model directory', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const binding = harness.find('/dsh-live-tavern-lite/binding')
 
   const empty = await call(binding, { url: '/dsh-live-tavern-lite/binding?model=demo' })
@@ -402,7 +402,7 @@ test('disposal unregisters every route', async () => {
 test('a stage stream without a session receives every frame', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root, director: false })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', director: false })
   const tool = harness.tools.find(entry => entry.name === 'live2d_act')
   const stream = harness.find('/dsh-live-tavern-lite/stage')
 
@@ -504,7 +504,7 @@ test('motion requests only resolve to groups the model declares', () => {
 test('live2d_act publishes a stage frame the browser receives', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root, director: false, stageUpdatesPerTurn: 8 })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', director: false, stageUpdatesPerTurn: 8 })
   await writeFile(join(root, 'demo', 'binding.json'), JSON.stringify({
     version: 1,
     expressions: { alpha: { emotion: 'joy', valence: 0.8, arousal: 0.5 } },
@@ -557,7 +557,7 @@ test('live2d_act publishes a stage frame the browser receives', async () => {
 test('a bare emotion vector drives the face without a prototype id', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root, director: false })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', director: false })
   const tool = harness.tools.find(entry => entry.name === 'live2d_act')
 
   const value = await tool.execute({ valence: 0.9, arousal: 0.2, dominance: 0.1, intensity: 0.9 }, {
@@ -580,7 +580,7 @@ test('a bare emotion vector drives the face without a prototype id', async () =>
 test('parameter notes round-trip and are validated', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const route = harness.find('/dsh-live-tavern-lite/params')
 
   const initial = JSON.parse((await call(route)).text)
@@ -606,7 +606,7 @@ test('parameter notes round-trip and are validated', async () => {
 
   // A note survives a fresh activation.
   const second = fakeContext()
-  apply(second.ctx, { modelsRoot: root })
+  apply(second.ctx, { modelsRoot: root, model: 'demo' })
   const reloaded = JSON.parse((await call(second.find('/dsh-live-tavern-lite/params'))).text)
   assert.equal(reloaded.notes.ParamMouthForm.verified, true)
 
@@ -637,7 +637,7 @@ test('an absolute model or pack path names that folder', async () => {
 test('the directory route reports a missing picker instead of failing blind', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const route = harness.find('/dsh-live-tavern-lite/directory')
   const refused = await call(route)
   assert.equal(refused.statusCode, 501)
@@ -658,7 +658,7 @@ test('generating a rig validates a real reply through normalizeRig', async () =>
 test('generating a rig refuses to run without confirmed notes', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const route = harness.find('/dsh-live-tavern-lite/rig/generate')
   const refused = await call(route, { method: 'POST' })
   assert.equal(refused.statusCode, 400)
@@ -674,7 +674,7 @@ test('generating a rig refuses to run without confirmed notes', async () => {
 test('a reloaded stage resumes the most recent frame', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root, director: false })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', director: false })
   const tool = harness.tools.find(entry => entry.name === 'live2d_act')
   await tool.execute({ emotion: 'anger', line: '哼' }, { agent: { id: 's1' } })
 
@@ -705,7 +705,7 @@ test('the director drives the stage when the local model stayed silent', async (
       agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'chat' }) },
     },
   })
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const stream = harness.find('/dsh-live-tavern-lite/stage')
   const browser = new FakeResponse()
   await stream.handler(fakeRequest({ url: '/dsh-live-tavern-lite/stage' }), browser)
@@ -739,7 +739,7 @@ test('one control call can carry the memory too', async () => {
   // A fresh sentence: the fallback memory directory is shared with earlier runs.
   const fact = `玩家喜欢在${Date.now()}这天晚上聊天`
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root, director: false })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', director: false })
   const tool = harness.tools.find(entry => entry.name === 'live2d_act')
   const answer = await tool.execute({
     emotion: 'joy',
@@ -761,7 +761,7 @@ test('one control call can carry the memory too', async () => {
 test('the per-turn setting is a floor: more updates are allowed', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root, director: false, stageUpdatesPerTurn: 2 })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', director: false, stageUpdatesPerTurn: 2 })
   const tool = harness.tools.find(entry => entry.name === 'live2d_act')
 
   // The floor is 2, but a third and fourth update are still accepted.
@@ -784,7 +784,7 @@ test('the per-turn setting is a floor: more updates are allowed', async () => {
 test('the control tool refuses while the cross-session mode is on', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const tool = harness.tools.find(entry => entry.name === 'live2d_act')
   const answer = await tool.execute({ emotion: 'joy' }, { agent: { id: 's1' } })
   // The stage belongs to the director in this mode; the session model is told so.
@@ -809,7 +809,7 @@ test('a local live2d_act wins the turn and the director stays out', async () => 
       agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'chat' }) },
     },
   })
-  apply(harness.ctx, { modelsRoot: root, director: false })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo', director: false })
   const session = { id: 's1', header: { id: 's1' } }
   harness.emit('session/event', session, {
     type: 'user/message',
@@ -851,7 +851,7 @@ test('director memory persists across plugin activations', async () => {
   })
 
   const first = fakeContext({ services: services() })
-  apply(first.ctx, { modelsRoot: root })
+  apply(first.ctx, { modelsRoot: root, model: 'demo' })
   const session = { id: 's1', header: { id: 's1' } }
   first.emit('session/event', session, {
     type: 'user/message',
@@ -859,8 +859,8 @@ test('director memory persists across plugin activations', async () => {
   })
   first.emit('session/event', session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
   assert.ok(await waitFor(() => prompts.length === 1))
-  // Per-session memory: beside the models directory, under the session's own file.
-  const memoryFile = join(home, 'live2d', 'director', 'sessions', 's1.json')
+  // Per-session memory: beside the model that owns the character, one file per session.
+  const memoryFile = join(root, 'demo', 'memory', 's1.json')
   // The write is awaited inside the director, so the file appears shortly after
   // the reply; waiting for it keeps the read from racing the write.
   assert.ok(await waitFor(() => existsSync(memoryFile)), 'memory file written')
@@ -873,7 +873,7 @@ test('director memory persists across plugin activations', async () => {
 
   // A fresh activation reads the same file: memory is durable, not in-process.
   const second = fakeContext({ services: services() })
-  apply(second.ctx, { modelsRoot: root })
+  apply(second.ctx, { modelsRoot: root, model: 'demo' })
   second.emit('session/event', session, {
     type: 'user/message',
     data: { message: { content: [{ type: 'text', text: '今天有点累' }] } },
@@ -1037,6 +1037,29 @@ test('every settings field carries a value the form can read', async () => {
   harness.disposeAll()
 })
 
+test('an empty pack path means no model, and the plugin stays idle', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-idle-'))
+  process.env.DSH_HOME = home
+  // A model is discoverable, but nothing selects it: the stage must not adopt it silently.
+  const model = join(home, 'live2d', 'models', 'demo')
+  await mkdir(model, { recursive: true })
+  await writeFile(join(model, 'demo.model3.json'), JSON.stringify({ FileReferences: { Moc: 'demo.moc3' } }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { modelsRoot: join(home, 'live2d', 'models') })
+  const config = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/config'))).text)
+  assert.equal(config.selected, null, 'no pack path selects nothing')
+  assert.equal(config.stageKind, null)
+  assert.deepEqual(config.models.map(entry => entry.id), ['demo'], 'the model list still enumerates')
+
+  // Tools answer without pretending a model exists.
+  const act = harness.tools.find(tool => tool.name === 'live2d_act')
+  const answer = await act.execute({ emotion: 'joy' }, {})
+  assert.equal(answer.ok, false)
+
+  harness.disposeAll()
+})
+
 test('the mobile runtime keeps two seats and no workbench', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-mobile-'))
   process.env.DSH_HOME = home
@@ -1131,9 +1154,10 @@ test('VRM-only settings are hidden while a Live2D model is mounted', async () =>
   await mkdir(threeD, { recursive: true })
   await writeFile(join(threeD, 'three.vrm'), Buffer.from('glTF'))
 
+  // The pack path is what selects a model, so the settings file has to exist before apply.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'live' }))
   const harness = fakeContext()
   apply(harness.ctx, { packsRoot: packs, modelsRoot: join(home, 'live2d', 'models') })
-  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'live' }))
   const asLive2d = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/settings'))).text)
   assert.equal(asLive2d.stageKind, 'live2d')
   for (const key of vrmOnly) {
@@ -1171,7 +1195,7 @@ test('every settings field ships a reset default, mirrored by the client fallbac
 test('prompt section teaches the tool and the prototype vocabulary', async () => {
   const root = await fixtureModels()
   const harness = fakeContext()
-  apply(harness.ctx, { modelsRoot: root })
+  apply(harness.ctx, { modelsRoot: root, model: 'demo' })
   const section = harness.sections.find(entry => entry.name === 'tool:live2d')
   assert.ok(section, 'prompt section registered')
   assert.equal(section.order, 2410)

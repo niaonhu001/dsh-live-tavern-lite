@@ -1756,10 +1756,38 @@ async function startEngine() {
   }
 }
 
+/**
+ * Leave the page untouched when no model is configured.
+ *
+ * The stage owns a mask, seats and a canvas; with no pack selected there is nothing to draw, so
+ * this hides what a previous activation may have left behind and installs nothing.
+ */
+function stageIdle() {
+  S.idle = true
+  for (const entry of S.seats.values()) {
+    if (entry?.node !== undefined) {
+      entry.node.hidden = true
+      entry.node.remove()
+    }
+  }
+  S.seats.clear()
+  if (S.primary?.host !== undefined) {
+    S.primary.host.hidden = true
+    S.primary.host.remove()
+  }
+  S.primary = null
+  if (S.mask !== undefined) {
+    S.mask.remove()
+    S.mask = undefined
+  }
+}
+
 async function startEngineInner() {
   const config = S.config
   if (!config.selected) {
-    showError(new Error(`没有找到可用的 Live2D 模型。把模型文件夹放进 ${config.modelsRoot}（每个子文件夹一个模型，需含 .model3.json），然后刷新页面。`))
+    // An empty pack path means no model configured: the plugin stays out of the page instead of
+    // painting an error over a UI the player did not ask for a character for.
+    stageIdle()
     return
   }
   if (config.stageKind === 'vrm') {

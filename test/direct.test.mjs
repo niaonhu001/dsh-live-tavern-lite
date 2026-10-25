@@ -33,7 +33,8 @@ async function harnessWith({ director = true, reply, everyTurns, interaction } =
   await writeFile(join(packs, 'model', 'a.moc3'), 'moc')
   await writeFile(join(packs, 'model', 't.png'), 'png')
   await mkdir(join(home, 'live2d'), { recursive: true })
-  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ director, ...(everyTurns === undefined ? {} : { stageEveryTurns: everyTurns }), ...(interaction === undefined ? {} : { interaction }) }))
+  // The pack path selects the model: without it the plugin is idle by design.
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'ailian', director, ...(everyTurns === undefined ? {} : { stageEveryTurns: everyTurns }), ...(interaction === undefined ? {} : { interaction }) }))
 
   const tools = []
   const seen = []
