@@ -17,11 +17,21 @@ import { parseTracks, startTracks, stepTracks } from '../lib/tracks.mjs'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation'
 
 /** The settings page is a slot; without it the stage still runs. */
 export const inject = ['slots']
 
 const API = '/dsh-live-tavern-lite'
+
+/**
+ * Stamped onto every status report.
+ *
+ * The browser half is re-read from disk on each page load while the Host module is
+ * not, so "the page is still running the previous bundle" is a real state and has to
+ * be visible from `/status` instead of guessed.
+ */
+const CLIENT_BUILD = '2026-10-30-stage-tab2'
 
 /**
  * Built-in settings values, so the per-field reset buttons work even against a
@@ -35,6 +45,7 @@ const FALLBACK_DEFAULTS = {
   playerName: '玩家',
   textureLod: 'full',
   opacity: 1,
+  contentTransparent: false,
   lookAtPointer: false,
   hitBoxScale: 1,
   springStrength: 1,
@@ -42,15 +53,35 @@ const FALLBACK_DEFAULTS = {
   mobileUi: 'auto',
   springGravity: 0,
   widthCap: 0.6,
+  bubbleWidth: 360,
+  bubbleFontSize: 13,
+  bubbleOpacity: 0.93,
+  motionProvider: 'sample',
+  motionEndpoint: '',
+  motionDuration: 4,
+  // 0 matches the Host default: generation waits for as long as it takes.
+  motionTimeout: 0,
+  ttsProvider: 'off',
+  ttsApiKey: '',
+  ttsModel: 'qwen-audio-3.1-tts-flash',
+  ttsLanguage: 'auto',
+  ttsSyncMode: 'audio-first',
+  ttsVoice: 'longanhuan_v3.1',
+  ttsModelControls: true,
+  ttsRate: 1,
+  ttsPitch: 1,
+  ttsInstruction: '',
+  ttsBaseUrl: 'https://maas.qianwenaiapi.com',
   memoryScope: 'session',
   sessionMaxFacts: 24,
   recallScope: 'session',
-  director: true,
+  directorMode: 'hybrid',
   directorProvider: '',
   directorModel: '',
   directorEffort: '',
   stageEveryTurns: 1,
   stageUpdatesPerTurn: 2,
+  rateLimits: true,
   interaction: false,
   directorMaxCallsPerHour: 60,
   directorMaxFacts: 24,
@@ -60,11 +91,120 @@ const FALLBACK_DEFAULTS = {
   worldbookScanDepth: 8,
   worldbookCooldownRounds: 2,
 }
+/**
+ * Titled, collapsible blocks the settings form builds for fields that declare a
+ * `section`.
+ *
+ * The Host decides which field belongs where; this table only supplies the words,
+ * the default open state and the order, so a new group needs no form code.
+ */
+const SETTINGS_SECTIONS = {
+  stage: {
+    title: '舞台',
+    hint: '模型、贴图、位置、物理与点击',
+  },
+  motion: {
+    title: '动作生成',
+    hint: '文字怎样变成一段整段动作',
+  },
+  bubble: {
+    title: '气泡',
+    hint: '台词气泡的尺寸、字号与底色：下面那条示例会跟着立刻变。左右上下的偏移在「位置」里调',
+  },
+  voice: {
+    title: '语音',
+    hint: '台词念出来的那一段：先把 API Key、模型与音色填好；合成与播放会在下一步接上',
+  },
+  director: {
+    title: '跨会话模型',
+    hint: '场外模型与她何时更新表情、记忆与互动',
+  },
+  worldbook: {
+    title: '世界书',
+    hint: '注入预算、扫描深度与冷却，以及世界书诊断',
+  },
+  rig: {
+    title: '映射表',
+    hint: '生成映射表时的输出上限',
+  },
+}
+
+/** Language labels for the voice/language mismatch hint. */
+const TTS_LANGUAGE_LABELS = {
+  zh: '中文', en: '英语', ja: '日语', ko: '韩语', fr: '法语', de: '德语', es: '西班牙语',
+  it: '意大利语', pt: '葡萄牙语', ru: '俄语', ar: '阿拉伯语', th: '泰语', id: '印尼语',
+  vi: '越南语', ms: '马来语', fil: '菲律宾语',
+}
+
+/** Render order of the sections; unknown sections follow in insertion order. */
+const SETTINGS_SECTION_ORDER = ['stage', 'motion', 'bubble', 'voice', 'director', 'worldbook', 'rig']
+
+/** localStorage key holding which sections are collapsed. */
+const FOLD_STATE_KEY = 'dsh-l2d-folds'
+
+/**
+ * Read the collapsed/expanded state of every section.
+ *
+ * @returns Object of `sectionId → open`.
+ */
+function readFoldState() {
+  try {
+    const raw = window.localStorage.getItem(FOLD_STATE_KEY)
+    const parsed = raw === null ? null : JSON.parse(raw)
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Remember one section's state, so reopening the settings page keeps the layout.
+ *
+ * @param id - Section id.
+ * @param open - Whether the section is expanded.
+ */
+function writeFoldState(id, open) {
+  try {
+    const state = readFoldState()
+    state[id] = open
+    window.localStorage.setItem(FOLD_STATE_KEY, JSON.stringify(state))
+  } catch {
+    // A browser with storage disabled simply keeps the default state.
+  }
+}
+
+/**
+ * Build one collapsible settings block.
+ *
+ * A native `<details>` carries keyboard support, finding (ctrl+f opens it) and the
+ * toggle event for free; the state is stored per section and per browser.
+ *
+ * @param options - `{ id, title, hint, open }`.
+ * @returns `{ node, body }`: the `<details>` and the container for its content.
+ */
+function mountFold(options) {
+  const stored = readFoldState()[options.id]
+  const open = typeof stored === 'boolean' ? stored : options.open !== false
+  const node = el('details', { class: 'fold' })
+  if (open) node.open = true
+  const summary = el('summary', { class: 'fold-summary' })
+  summary.append(el('span', { class: 'fold-title', text: options.title }))
+  if (options.hint !== undefined) summary.append(el('span', { class: 'fold-hint', text: options.hint }))
+  const body = el('div', { class: 'fold-body' })
+  node.append(summary, body)
+  node.addEventListener('toggle', () => writeFoldState(options.id, node.open))
+  return { node, body }
+}
 const PANEL_TITLE = 'Live2D 标定'
 const STYLE_ID = 'dsh-live-tavern-style'
 const SEATS = ['chat', 'foreground', 'sidebar']
 const SEAT_LABELS = { chat: '聊天区底', foreground: '前景', sidebar: '侧栏' }
 const EMOTIONS = ['neutral', 'joy', 'sad', 'anger', 'surprise', 'fear', 'shy', 'tender']
+/** The right-Sidebar tab type this plugin owns: one page, the character standing in it. */
+const STAGE_TAB_ID = 'dsh-live-tavern-lite-stage'
+const STAGE_TAB_KIND = 'live-tavern-stage'
+/** Marks the element the tab body renders, which the sidebar seat then measures. */
+const STAGE_TAB_BODY_ATTR = 'data-dsh-l2d-tab-body'
 
 const CSS = `
 [data-dsh-l2d-anchor]{position:relative}
@@ -72,17 +212,57 @@ const CSS = `
 .dsh-l2d-seat[data-placement="foreground"]{position:fixed;inset:0;z-index:2147482000}
 .dsh-l2d-seat[data-placement="chat"]{z-index:-1}
 .dsh-l2d-seat[data-placement="sidebar"]{z-index:-1}
+.dsh-l2d-seat[data-in-tab="1"]{position:absolute;left:0;top:0;right:0;bottom:0;width:auto;height:auto;z-index:1}
 .dsh-l2d-host{position:absolute;inset:0}
+.dsh-l2d-tab-body{position:relative;width:100%;height:100%;min-height:320px;overflow:hidden}
 .dsh-l2d-host canvas{display:block;width:100%;height:100%}
 .dsh-l2d-mirror{position:absolute;inset:0;width:100%;height:100%}
 .dsh-l2d-mask{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);font:12px/1.6 ui-sans-serif,system-ui;color:#8a7d70;background:rgba(255,255,255,.72);border:1px solid rgba(78,50,23,.12);border-radius:999px;padding:5px 14px;white-space:nowrap}
-.dsh-l2d-bubble{position:fixed;left:50%;bottom:46%;transform:translateX(-50%);z-index:2147482900;max-width:min(360px,74%);background:rgba(255,255,255,.93);border:1px solid rgba(78,50,23,.14);border-radius:12px;padding:8px 12px;font:13px/1.65 ui-sans-serif,system-ui;color:#2b241d;box-shadow:0 6px 20px rgba(78,50,23,.12);opacity:0;transition:opacity .18s ease;pointer-events:none}
+.dsh-l2d-bubble{position:fixed;left:50%;bottom:46%;transform:translateX(-50%);z-index:2147482900;max-width:min(var(--dsh-l2d-bubble-width,360px),74%);background:rgba(255,255,255,var(--dsh-l2d-bubble-alpha,.93));border:1px solid rgba(78,50,23,.14);border-radius:12px;padding:.62em .92em;font-family:ui-sans-serif,system-ui;font-size:var(--dsh-l2d-bubble-font,13px);line-height:1.65;color:#2b241d;box-shadow:0 6px 20px rgba(78,50,23,.12);opacity:0;transition:opacity .18s ease;pointer-events:none}
 .dsh-l2d-bubble[data-show="1"]{opacity:1}
-.dsh-l2d-bubble:after{content:'';position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:rgba(255,255,255,.93);border-right:1px solid rgba(78,50,23,.14);border-bottom:1px solid rgba(78,50,23,.14);transform:translateX(-50%) rotate(45deg)}
+.dsh-l2d-bubble:after{content:'';position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:rgba(255,255,255,var(--dsh-l2d-bubble-alpha,.93));border-right:1px solid rgba(78,50,23,.14);border-bottom:1px solid rgba(78,50,23,.14);transform:translateX(-50%) rotate(45deg)}
 .dsh-l2d-error{position:fixed;left:16px;bottom:16px;z-index:2147483000;max-width:520px;font:12px/1.6 ui-monospace,monospace;color:#7a1d1d;background:#fff3f1;border:1px solid #e2b4ab;border-radius:10px;padding:10px 12px;white-space:pre-wrap;pointer-events:auto}
 .dsh-l2d-set{font:13px/1.7 ui-sans-serif,system-ui;color:#2b241d;max-width:720px}
 .dsh-l2d-set *,.dsh-l2d-set *:before,.dsh-l2d-set *:after{box-sizing:border-box}
 .dsh-l2d-set .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 26px;margin:10px 0 16px;border-top:1px solid rgba(78,50,23,.1)}
+.dsh-l2d-set .fold .grid{margin:4px 0 10px;border-top:none}
+.dsh-l2d-set .fold{margin-top:16px;border-top:1px solid rgba(78,50,23,.12);padding-top:4px}
+.dsh-l2d-set .fold>summary{display:flex;align-items:baseline;gap:10px;padding:8px 2px;cursor:pointer;list-style:none;font:600 14px/1.4 ui-sans-serif,system-ui;color:#2b241d;letter-spacing:.02em}
+.dsh-l2d-set .fold>summary::-webkit-details-marker{display:none}
+.dsh-l2d-set .fold>summary::before{content:'▸';flex:0 0 auto;color:#a2947f;font-size:11px;line-height:1.6;transition:transform .15s ease}
+.dsh-l2d-set .fold[open]>summary::before{transform:rotate(90deg)}
+.dsh-l2d-set .fold-hint{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/1.5 ui-sans-serif,system-ui;color:#8a7d70;letter-spacing:0}
+.dsh-l2d-set .fold-body{padding:2px 0 8px}
+
+
+.dsh-l2d-set .tts-hint{margin:6px 0 0;font-size:12px;line-height:1.6;color:#8a7d70}
+.dsh-l2d-set .tts-hint:empty{display:none}
+.dsh-l2d-set .tts-hint[data-state="warn"]{color:#8a6a4f}
+.dsh-l2d-set .tts-clone{margin-top:10px;padding-top:10px;border-top:1px dashed rgba(78,50,23,.16)}
+.dsh-l2d-set .tts-clone-head{display:flex;gap:8px;align-items:center;flex-wrap:nowrap}
+.dsh-l2d-set .tts-clone-row-edit{display:flex;gap:8px;align-items:center;margin-top:6px}
+.dsh-l2d-set .tts-clone-row-edit select{flex:1 1 auto;min-width:0}
+.dsh-l2d-set .tts-clone-file{flex:1 1 46%;min-width:0;font-size:12px}
+.dsh-l2d-set .tts-clone-head input[type=text]{flex:0 1 30%;min-width:0}
+.dsh-l2d-set .tts-clone .status{display:block;margin-top:6px;font-size:12px;line-height:1.5;color:#8a7d70;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-l2d-set .tts-clone .status[data-state="ok"]{color:#5d7a52}
+.dsh-l2d-set .tts-clone .status[data-state="error"]{color:#9a4a3a}
+.dsh-l2d-set .tts-clone .status[data-state="busy"]{color:#a2947f}
+.dsh-l2d-set .tts-clone-list{margin-top:6px}
+.dsh-l2d-set .tts-clone-row{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid rgba(78,50,23,.06);font-size:12.5px;color:#463f38}
+.dsh-l2d-set .tts-clone-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2b241d}
+.dsh-l2d-set .tts-clone-model{flex:1 1 auto;min-width:0;font-family:'Lanxi-品宋';color:#a2947f;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-l2d-set .tts-clone-jump{border:1px solid rgba(138,106,79,.35);background:none;color:#8a6a4f;border-radius:999px;padding:1px 8px;font-size:11.5px;cursor:pointer;margin-left:4px}
+.dsh-l2d-set .tts-clone-sample{flex:0 0 auto;font-size:11.5px;color:#8a6a4f;text-decoration:none;border-bottom:1px solid rgba(138,106,79,.35)}
+.dsh-l2d-set .tts-clone-del{flex:0 0 auto;border:none;background:none;color:#b3a496;cursor:pointer;padding:0 2px;font-size:12px}
+.dsh-l2d-set .choice{display:flex;gap:6px;min-width:0}
+.dsh-l2d-set .choice select,.dsh-l2d-set .choice input{flex:1 1 auto;min-width:0}
+.dsh-l2d-set .tts-test{display:flex;align-items:center;gap:10px;padding:10px 2px 6px;border-top:1px dashed rgba(78,50,23,.16);margin-top:6px}.dsh-l2d-set .bubble-preview{display:flex;padding:10px 2px 6px;border-top:1px dashed rgba(78,50,23,.16);margin-top:2px}
+.dsh-l2d-set .tts-test .status{font-size:12px;line-height:1.5;color:#8a7d70;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-l2d-set .tts-test .status[data-state="ok"]{color:#5d7a52}
+.dsh-l2d-set .tts-test .status[data-state="error"]{color:#9a4a3a}
+.dsh-l2d-set .tts-test .status[data-state="busy"]{color:#a2947f}
+.dsh-l2d-set .bubble-preview-line{display:inline-block;border:1px solid rgba(78,50,23,.14);border-radius:12px;padding:.62em .92em;line-height:1.65;color:#2b241d;box-shadow:0 6px 20px rgba(78,50,23,.1);transition:background .15s linear,font-size .15s linear,max-width .15s linear}
 @media (max-width:760px){.dsh-l2d-set .grid{grid-template-columns:1fr}}
 .dsh-l2d-set .field{display:grid;grid-template-columns:96px minmax(0,1fr) 26px;gap:3px 9px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(78,50,23,.07);min-width:0}
 .dsh-l2d-set .field>*{min-width:0}
@@ -144,8 +324,6 @@ const CSS = `
 .dsh-l2d-set button:hover{background:#f0e9e2}
 .dsh-l2d-set button.primary{background:#2b241d;border-color:#2b241d;color:#fff}
 .dsh-l2d-set .status{font-size:12px;color:#4f6b4a}
-.dsh-l2d-set .block{margin-top:24px;padding-top:18px;border-top:1px solid rgba(78,50,23,.12)}
-.dsh-l2d-set .block h3{font:600 14px/1.4 ui-sans-serif,system-ui;margin:0 0 10px;color:#2b241d;letter-spacing:.02em}
 .dsh-l2d-set .preset{display:grid;grid-template-columns:96px 104px minmax(0,1fr) 64px 64px 24px;gap:6px;align-items:center;margin-bottom:6px}
 .dsh-l2d-set .preset input,.dsh-l2d-set .preset select{width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid rgba(78,50,23,.18);border-radius:6px;background:#fff;font:12px/1.4 ui-sans-serif,system-ui;color:#2b241d}
 .dsh-l2d-set .preset button.reset{justify-self:center}
@@ -200,7 +378,33 @@ const CSS = `
 .dsh-l2d-wb .wb-stage{position:absolute;inset:0;cursor:grab;touch-action:none}
 .dsh-l2d-wb .wb-stage.dragging{cursor:grabbing}
 .dsh-l2d-wb .wb-hint{position:absolute;left:14px;bottom:12px;font-size:11.5px;color:#8a8175;pointer-events:none}
-body.dsh-l2d-grabbing,body.dsh-l2d-grabbing *{cursor:grabbing !important}`
+body.dsh-l2d-grabbing,body.dsh-l2d-grabbing *{cursor:grabbing !important}
+/* 内容层透明 (the contentTransparent switch).
+   The chat and sidebar seats paint behind the columns (z-index:-1), so the
+   opaque panels above them are exactly what hides the character: the frame's
+   own base fill, the column fills, and the composer seat's fade-to-background
+   gradient. Clearing those reveals the stage. What stays opaque is what has to
+   be read: bubbles, code blocks and the composer card keep their own fills.
+   One attribute on <html> gates all of it, so the switch is a single write. */
+html[data-dsh-l2d-clear] [data-dsh-l2d-frame]{background:transparent!important}
+html[data-dsh-l2d-clear] [data-dsh-l2d-frame]>[class]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="sidebar"]>[class],
+html[data-dsh-l2d-clear] [data-slot="main.conversation"]>[class]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerSeat"]{background:transparent!important}
+html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerStack"]{background:transparent!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerHero"],
+html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="heroWorkspaceRow"]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="rightbar"] [class*="_tabHost_"]:not([class*="_float_"]){background:transparent!important}
+/* 侧栏舞台 (placement = sidebar).
+   The seat is cut to the sidebar column so the character stands inside the rail,
+   but the rail is painted over by two fills between her and the eye: the frame's
+   base fill (below her layer) and the sidebar column + its root fill (above it).
+   They clear only while the stage lives in the sidebar, so picking another
+   placement puts the rail back exactly as it was. The conversation column keeps
+   its fill — that is the same base colour, so nothing outside the rail moves. */
+html[data-dsh-l2d-stage="sidebar"] [data-dsh-l2d-frame]{background:transparent!important}
+html[data-dsh-l2d-stage="sidebar"] [class*="sidebarCol"]{background:transparent!important}
+html[data-dsh-l2d-stage="sidebar"] [data-slot="sidebar"]>[class]{background-color:transparent!important;background-image:none!important}`
 
 /** Module-scope singletons; `apply()` is the only writer. */
 const S = {
@@ -210,6 +414,16 @@ const S = {
   primary: null,
   seats: new Map(),
   mirrors: new Set(),
+  /** The right-Sidebar navigation face, when the shell serves one. */
+  sidebarRight: null,
+  /** The tab body element while the character's page is open. */
+  stageTabBody: null,
+  /** The placements as last applied, so entering the rail once opens its page once. */
+  appliedPlacements: [],
+  /** What the model asked the stage to keep: replayed every frame, above the rig. */
+  persist: { params: {}, expression: '' },
+  /** The expression currently applied, so a kept face is not re-applied every frame. */
+  appliedExpression: '',
   host: new Map(),
   panel: null,
   error: null,
@@ -222,6 +436,10 @@ const S = {
   /** Unscaled model height; measured once per model so re-fits stay stable. */
   baseHeight: undefined,
   baseWidth: undefined,
+  /** The clip currently speaking the line on screen, if any. */
+  speech: null,
+  /** A clip held back by the browser's autoplay rule, retried on the next tap. */
+  pendingSpeech: null,
   /** Which stage is mounted: `live2d` (pixi) or `vrm` (three.js). */
   kind: null,
   /** The mounted 3D stage, null for Live2D. */
@@ -275,6 +493,47 @@ function el(tag, props = {}, children = []) {
   return node
 }
 
+/**
+ * The body of the character's right-Sidebar tab.
+ *
+ * The tab system renders React, the stage is plain DOM with its own canvas, so the
+ * body is only an anchor: one full-size element the sidebar seat measures. Mounting
+ * and unmounting it is the signal to move the seat in or hand it back.
+ *
+ * @returns The anchor element.
+ */
+function StageTabBody() {
+  const ref = React.useRef(null)
+  React.useEffect(() => {
+    S.stageTabBody = ref.current
+    scheduleStageReanchor()
+    return () => {
+      if (S.stageTabBody === ref.current) S.stageTabBody = null
+      scheduleStageReanchor()
+    }
+  }, [])
+  return React.createElement('div', {
+    ref,
+    className: 'dsh-l2d-tab-body',
+    [STAGE_TAB_BODY_ATTR]: '',
+  })
+}
+
+let reanchorTimer = 0
+
+/** Re-place the seats after the tab body appears or goes away. */
+function scheduleStageReanchor() {
+  if (reanchorTimer !== 0) clearTimeout(reanchorTimer)
+  reanchorTimer = window.setTimeout(() => {
+    reanchorTimer = 0
+    if (S.disposed) return
+    if (S.app === null && S.vrm === null) return
+    applyPlacements(S.config?.placement ?? ['chat'])
+    if (S.kind === 'vrm') fitVrm()
+    else fitModel()
+  }, 80)
+}
+
 /** A one-line notice instead of a stack: the common failure has a known cause. */
 /**
  * Report a degraded state without drawing over the page.
@@ -316,10 +575,28 @@ async function fetchJson(url, init) {
  * a placement can legitimately have no anchor yet. The frame overlay always has
  * `document.body`, which is what makes a graceful degradation possible.
  */
+/**
+ * Whether this page is the phone shell.
+ *
+ * The phone build has neither a sidebar column nor the workbench, so a seat in the
+ * rail can never resolve — it would wait forever and leave the character nowhere.
+ *
+ * @returns True on the phone shell.
+ */
+function isPhoneShell() {
+  return S.config?.capabilities?.workbench === false
+}
+
 function anchorCandidates(placement) {
   if (placement === 'foreground') return [document.body]
   if (placement === 'sidebar') {
+    // The phone shell has no sidebar column at all: a seat there would wait for an
+    // anchor that never appears, so it reports none instead.
+    if (isPhoneShell()) return []
     return [
+      // The character's own page in the right Sidebar wins: when it is open, that
+      // page is the rail the character is meant to stand in.
+      document.querySelector(`[${STAGE_TAB_BODY_ATTR}]`),
       document.querySelector('[data-slot="sidebar"]'),
       document.querySelector('[class*="sidebarCol"]'),
     ].filter(Boolean)
@@ -353,6 +630,106 @@ async function waitForSeats(configured, timeoutMs = 20_000) {
   }
 }
 
+/**
+ * The element whose rectangle is the sidebar column.
+ *
+ * The seat hangs off the `sidebar` slot, and a slot host may be `display:contents`
+ * — a zero box that says nothing about the rail. The column itself is the
+ * `sidebarCol` sibling the shell grid places, and its name suffix survives CSS
+ * Module hashing, so it is the element a column-sized seat measures and tracks.
+ *
+ * @returns The column element, or null before the shell mounts.
+ */
+function sidebarBoxElement(anchor) {
+  if (anchor === null || anchor === undefined) return null
+  // A stage page measures itself: it is already the rail's content box, and its
+  // ancestors carry the tab strip the character must not stand behind.
+  if (anchor.hasAttribute?.(STAGE_TAB_BODY_ATTR)) return anchor
+  const column = typeof anchor.closest === 'function' ? anchor.closest('[class*="sidebarCol"]') : null
+  return column ?? anchor
+}
+
+/**
+ * The box a seat's fixed layer covers.
+ *
+ * Chat and foreground seats are the whole viewport: the stage is a backdrop and
+ * the transcript paints over it. The sidebar seat is the sidebar column itself —
+ * the character is meant to stand inside that column, so its layer starts where
+ * the column starts and is cut where the column ends. Everything downstream reads
+ * the host box (renderer size, fit, hit test, bubble anchor), so this one
+ * rectangle is the whole difference between "behind the page" and "in the rail".
+ *
+ * @returns The column rectangle, or null for the viewport-sized seats.
+ */
+function seatRectFor(placement, anchor) {
+  if (placement !== 'sidebar') return null
+  const column = sidebarBoxElement(anchor)
+  if (column === null) return null
+  const rect = column.getBoundingClientRect()
+  // A collapsed rail is zero wide. Size the layer to nothing rather than falling
+  // back to the viewport: the model must not spill across the window when the
+  // sidebar is put away.
+  return {
+    left: Math.round(rect.left),
+    top: Math.round(rect.top),
+    width: Math.max(0, Math.round(rect.width)),
+    height: Math.max(0, Math.round(rect.height)),
+  }
+}
+
+/**
+ * Write a column rectangle (or back to `inset:0`) on a seat layer.
+ *
+ * The stylesheet gives the seat `inset:0`; a column-sized seat has to clear
+ * `right`/`bottom` or the over-constrained box would resolve against them.
+ */
+function sizeSeatNode(node, box) {
+  if (node === null || node === undefined) return
+  // A seat living in the character's page fills that page instead of a viewport box:
+  // the tab pane is the positioned ancestor, and a `position:fixed` layer under a
+  // transformed ancestor is measured in that ancestor's coordinates — which put the
+  // whole stage beside the page, off screen.
+  if (node.dataset?.inTab === '1') {
+    for (const side of ['left', 'top', 'right', 'bottom', 'width', 'height']) {
+      node.style.removeProperty(side)
+    }
+    return
+  }
+  if (box === null) {
+    for (const side of ['left', 'top', 'right', 'bottom', 'width', 'height']) {
+      node.style.removeProperty(side)
+    }
+    return
+  }
+  node.style.left = `${box.left}px`
+  node.style.top = `${box.top}px`
+  node.style.right = 'auto'
+  node.style.bottom = 'auto'
+  node.style.width = `${box.width}px`
+  node.style.height = `${box.height}px`
+}
+
+/**
+ * Keep a column-sized seat on its column.
+ *
+ * The sidebar changes width on collapse/expand (an animated track, no attribute
+ * this plugin observes) and on every window resize, so a ResizeObserver on the
+ * column is the only signal that covers all of it. The host inside follows, and
+ * its own observer resizes the renderer and re-fits.
+ */
+function observeSeatBox(node, anchor) {
+  const apply = () => {
+    sizeSeatNode(node, seatRectFor('sidebar', anchor))
+  }
+  apply()
+  if (typeof ResizeObserver === 'undefined') return null
+  const column = sidebarBoxElement(anchor)
+  if (column === null) return null
+  const observer = new ResizeObserver(apply)
+  observer.observe(column)
+  return observer
+}
+
 function ensureSeat(placement) {
   const anchor = anchorFor(placement)
   if (anchor === null) return null
@@ -361,11 +738,33 @@ function ensureSeat(placement) {
     S.seats.set(`mark:${placement}`, { marker: true, anchor })
   }
   const existing = S.seats.get(placement)
-  if (existing && !existing.marker && existing.anchor === anchor && existing.node.isConnected) return existing.node
+  if (existing && !existing.marker && existing.anchor === anchor && existing.node.isConnected) {
+    // Aligning here keeps a reused seat honest after the column moved.
+    sizeSeatNode(existing.node, seatRectFor(placement, anchor))
+    // The seat can be created before the rail exists (the slot host is there
+    // first, its column is not): move the observer onto whatever element the
+    // column resolves to now, or a later collapse would leave the layer stale.
+    if (placement === 'sidebar' && existing.boxTarget !== sidebarBoxElement(anchor)) {
+      existing.boxObserver?.disconnect?.()
+      existing.boxTarget = sidebarBoxElement(anchor)
+      existing.boxObserver = observeSeatBox(existing.node, anchor)
+    }
+    return existing.node
+  }
+  existing?.boxObserver?.disconnect?.()
   existing?.node?.remove()
   const node = el('div', { class: 'dsh-l2d-seat', dataset: { placement } })
+  // A seat inside the character's own page paints above that page: the page is the
+  // rail's content, and the `-1` backdrop rule would put her behind its fill.
+  if (typeof anchor.hasAttribute === 'function' && anchor.hasAttribute(STAGE_TAB_BODY_ATTR)) node.dataset.inTab = '1'
   anchor.append(node)
-  S.seats.set(placement, { marker: false, anchor, node })
+  S.seats.set(placement, {
+    marker: false,
+    anchor,
+    node,
+    boxTarget: placement === 'sidebar' ? sidebarBoxElement(anchor) : null,
+    boxObserver: placement === 'sidebar' ? observeSeatBox(node, anchor) : null,
+  })
   return node
 }
 
@@ -374,6 +773,39 @@ function mountCanvasHost(seat, placement) {
   host.dataset.placement = placement
   seat.append(host)
   return host
+}
+
+/**
+ * The artwork's own rectangle taken from the engine's drawable bounds.
+ *
+ * `extract` reads the frame back through WebGL, and a model whose textures are large
+ * enough to miss that readback reports an empty frame — every fit then measured the
+ * whole canvas, which put a character drawn in one corner of it on the stage edge and
+ * made the position sliders look dead. The engine already tracks the drawable extent,
+ * so prefer it.
+ *
+ * @returns Fractions of the sprite box, or undefined before the engine has bounds.
+ */
+function drawnRel() {
+  const model = S.model
+  if (!model) return undefined
+  try {
+    model.updateDrawableBounds?.()
+    const bounds = model.bounds
+    const width = (model.width || 0) / (model.scale.x || 1)
+    const height = (model.height || 0) / (model.scale.y || 1)
+    if (!(width > 0.01) || !(height > 0.01)) return undefined
+    if (!(bounds.width > 0.01) || !(bounds.height > 0.01)) return undefined
+    const rel = {
+      left: bounds.minX / width,
+      top: bounds.minY / height,
+      width: bounds.width / width,
+      height: bounds.height / height,
+    }
+    return [rel.left, rel.top, rel.width, rel.height].every(Number.isFinite) ? rel : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -390,6 +822,11 @@ function measureVisible() {
   const model = S.model
   if (!app || !model) return
   if (S.visibleRel !== undefined) return
+  const fromEngine = drawnRel()
+  if (fromEngine !== undefined) {
+    S.visibleRel = fromEngine
+    return
+  }
   try {
     const canvas = app.renderer.extract.canvas({ target: model, resolution: 0.1 })
     const context = canvas.getContext('2d', { willReadFrequently: true })
@@ -423,6 +860,18 @@ function measureVisible() {
 }
 
 /**
+ * The pack's own size multiplier, `1` when the pack does not declare one.
+ *
+ * A model's canvas can carry margins that make it read larger than the character
+ * beside a chat column; `stage.json` in the pack records the correction once, so
+ * every browser shows the same size instead of everyone re-tuning the height.
+ */
+function packScale() {
+  const value = Number(S.config?.packScale)
+  return Number.isFinite(value) && value > 0 ? Math.min(2, Math.max(0.2, value)) : 1
+}
+
+/**
  * Place the character so the drawn artwork — not the sprite's empty margin — is
  * `height`-ratio tall and never wider than the configured share of the stage.
  */
@@ -438,9 +887,10 @@ function fitModel() {
     S.baseWidth = (model.width || 1) / (model.scale.x || 1)
   }
   const { width, height } = app.screen
-  // Every seat is a viewport-sized fixed layer, so `app.screen` is the viewport
-  // in all three placements and these numbers come out identical: switching
-  // placement changes which layer paints her, never where she stands.
+  // `app.screen` is the host box, and the host is the seat: the viewport for the
+  // chat and foreground seats, the sidebar column for the sidebar seat. The fit
+  // therefore derives from whichever box the stage was mounted into — that is
+  // what makes 「侧栏」 stand her inside the rail instead of the window centre.
   const heightRatio = Number(S.workbenchPane === null ? S.layout.height : (S.workbenchHeight ?? S.layout.height))
   const target = height * (Number.isFinite(heightRatio) ? heightRatio : 0.92)
   const rel = S.visibleRel ?? { left: 0, top: 0, width: 1, height: 1 }
@@ -460,7 +910,7 @@ function fitModel() {
   // while a normal portrait keeps the size the user already tuned.
   const byHeight = target / (baseHeight || 1)
   const byWidth = maxWidth / (visibleWidth || 1)
-  const ratio = Math.min(byHeight, byWidth)
+  const ratio = Math.min(byHeight, byWidth) * packScale()
   model.scale.set(ratio)
   model.anchor.set(0.5, 1)
   const shift = S.workbenchPane === null ? { x: 0, y: 0 } : S.workbenchOffset
@@ -655,9 +1105,10 @@ let lastTapAt = 0
 function onModelPointerDown(event) {
   if (event.button !== 0) return
   // Seats that paint above the content only: in the chat column the transcript
-  // covers her, so a hit there cannot happen anyway.
+  // covers her, and in the sidebar the rail's own rows do — a press there belongs
+  // to the shell, and stealing it would make the session list unclickable.
   const seat = S.primary?.placement
-  if (seat === undefined || seat === 'chat') return
+  if (seat === undefined || seat === 'chat' || seat === 'sidebar') return
   if (S.settingsOpen || S.workbenchPane !== null) return
   if (!isModelHit(event)) return
   event.preventDefault()
@@ -1021,7 +1472,7 @@ async function startVrmEngine(config) {
   const host = mountCanvasHost(seat, primaryPlacement)
   S.primary = { placement: primaryPlacement, host }
   S.kind = 'vrm'
-
+  applyStageScope(primaryPlacement)
   const maskText = el('span', { text: `载入 ${config.selected.id} …` })
   const mask = el('div', { class: 'dsh-l2d-mask' })
   mask.append(maskText)
@@ -1073,6 +1524,10 @@ async function startVrmEngine(config) {
     exprPinned: new Map(),
     /** Running bone tracks. */
     tracks: [],
+    /** The generated clip currently driving the body, if any. */
+    motion: null,
+    /** URL of a clip that is being fetched and parsed. */
+    motionPending: null,
     /** Bone channel id → { node, axis, rest }. */
     bones: new Map(),
   }
@@ -1221,9 +1676,12 @@ async function startVrmEngine(config) {
     if (S.vrm !== stage) return
     stage.raf = requestAnimationFrame(tick)
     const delta = Math.min(0.1, clock.getDelta())
+    // A playing clip owns every bone it tracks, so the pose channels stand down
+    // until it ends; two writers on one quaternion read as a twitching arm.
+    const motionPlaying = stage.motion !== null && stage.motion !== undefined
     // Pinned channels hold without a track; tracks layer on top of them.
     if (!(stage.pinnedEased instanceof Map)) stage.pinnedEased = new Map()
-    for (const [id, degrees] of stage.pinned ?? []) {
+    for (const [id, degrees] of motionPlaying ? [] : (stage.pinned ?? [])) {
       const bone = stage.bones.get(id)
       if (bone === undefined) continue
       if (stage.tracks.some(channel => channel.id === id)) continue
@@ -1236,7 +1694,7 @@ async function startVrmEngine(config) {
     // A channel that leaves the frame must not freeze where it stopped. Dropping the
     // eased value alone left the bone rotated, so the next pose was painted on top of
     // the last one; eases back to rest instead.
-    for (const [id, eased] of [...stage.pinnedEased]) {
+    for (const [id, eased] of motionPlaying ? [] : [...stage.pinnedEased]) {
       if (stage.pinned?.has(id) ?? false) continue
       const bone = stage.bones.get(id)
       if (bone === undefined) {
@@ -1278,8 +1736,11 @@ async function startVrmEngine(config) {
         root.position.z = Number(stage.moveZ ?? 0)
       }
     }
-    if (stage.hips !== null && stage.hips !== undefined && stage.hipsRest !== null && stage.hipsRest !== undefined) {
-      const offset = stage.translate?.['hips']
+    if (stage.motion === null && stage.hips !== null && stage.hips !== undefined && stage.hipsRest !== null && stage.hipsRest !== undefined) {
+      const stated = stage.translate?.['hips']
+      // A frame states the body offset when it pins one; otherwise the pose a clip ended
+      // on keeps the body where it left it until something asks for a different height.
+      const offset = Array.isArray(stated) && stated.length === 3 ? stated : stage.clipHold?.hips
       const animated = Number(stage.hipsAnimatedY ?? 0)
       if ((Array.isArray(offset) && offset.length === 3) || animated !== 0) {
         stage.hips.position.set(
@@ -1292,7 +1753,7 @@ async function startVrmEngine(config) {
       }
     }
     // Workbench sliders write here, so the render loop cannot drop them.
-    if (stage.probe instanceof Map) {
+    if (!motionPlaying && stage.probe instanceof Map) {
       for (const [id, degrees] of stage.probe) {
         const bone = stage.bones.get(id)
         if (bone === undefined) continue
@@ -1305,7 +1766,15 @@ async function startVrmEngine(config) {
       stage.pendingChecks = null
       reportVrmChecks({ checks: paused.checks, recipe: paused.recipe })
     }
-    stepVrmTracks(performance.now())
+    if (!motionPlaying) stepVrmTracks(performance.now())
+    // A generated clip owns the body while it plays: it was published exactly
+    // because the pose channels cannot describe a walk or a dance phrase.
+    if (stage.motion !== null && stage.motion !== undefined) {
+      const running = stage.motion
+      running.mixer.update(delta)
+      running.elapsed += delta
+      if (!running.loop && running.elapsed >= running.clip.duration + 0.35) finishVrmMotion(stage)
+    }
     easeVrmExpressions(delta)
     vrm.update(delta)
     // Body facing: eased yaw of the model root, so a turn is a real turn of the whole rig.
@@ -1423,7 +1892,9 @@ function observeVrmHost(host) {
  * Scale the model to the layout height and stand it on the bottom edge.
  *
  * The camera frustum is one pixel per world unit, so the numbers here are the same
- * ones the Live2D fit uses: height ratio times viewport, then the drag offsets.
+ * ones the Live2D fit uses: height ratio times the stage box, then the drag
+ * offsets. The stage box is the host, not the window — in the sidebar seat they
+ * differ, and the model has to fit the rail she stands in.
  */
 function fitVrm() {
   const stage = S.vrm
@@ -1431,7 +1902,10 @@ function fitVrm() {
   const root = stage.vrm.scene
   const pivot = stage.pivot
   const ratio = Number(S.workbenchPane === null ? S.layout?.height : (S.workbenchHeight ?? S.layout?.height))
-  const targetHeight = window.innerHeight * (Number.isFinite(ratio) ? ratio : 0.92)
+  const stageBox = S.primary?.host?.getBoundingClientRect()
+  const stageWidth = stageBox !== undefined && stageBox.width > 1 ? stageBox.width : window.innerWidth
+  const stageHeight = stageBox !== undefined && stageBox.height > 1 ? stageBox.height : window.innerHeight
+  const targetHeight = stageHeight * (Number.isFinite(ratio) ? ratio : 0.92)
   // The unscaled size never changes, so it is measured once instead of on every
   // frame of a drag.
   if (stage.baseSize === undefined) {
@@ -1443,7 +1917,7 @@ function fitVrm() {
     stage.baseBottom = base.min.y
   }
   const capRatio = Number(S.config?.widthCap)
-  const maxWidth = window.innerWidth * (Number.isFinite(capRatio) ? Math.min(1, Math.max(0.2, capRatio)) : 0.6)
+  const maxWidth = stageWidth * (Number.isFinite(capRatio) ? Math.min(1, Math.max(0.2, capRatio)) : 0.6)
   // A model whose bounds collapse to nothing (an empty first frame) must not be
   // scaled by a number near zero, or she fills the screen.
   const baseHeight = stage.baseSize.y > 0.01 ? stage.baseSize.y : 1.6
@@ -1451,7 +1925,7 @@ function fitVrm() {
   const scale = Math.min(
     targetHeight / baseHeight,
     maxWidth / baseWidth,
-  )
+  ) * packScale()
   if (!(scale > 0) || !Number.isFinite(scale)) return
   if (stage.appliedScale !== scale) {
     root.scale.setScalar(scale)
@@ -1560,6 +2034,8 @@ function vrmPoseOf(frame) {
 function showVrmPose(pose) {
   const stage = S.vrm
   if (stage === null) return
+  // A pose that pins a body offset takes the body back from the clip it ended on.
+  if (pose.translate !== null) stage.clipHold = null
   stage.translate = pose.translate
   stage.pinned = pose.pinned
   const pinnedExpressions = pose.expressions ?? new Map()
@@ -1666,6 +2142,8 @@ function startVrmTracks(text) {
   }
   const hipsEntries = entries.filter(entry => HIPS_TRACK_IDS.has(entry.id))
   if (hipsEntries.length > 0) {
+    // A frame that keyframes the hips states the body height itself.
+    stage.clipHold = null
     const [channel] = startTracks(hipsEntries, () => 0, performance.now())
     stage.hipsTrack = channel ?? null
   } else {
@@ -1738,10 +2216,146 @@ function easeVrmExpressions(delta) {
   }
 }
 
+/**
+ * Play a generated VRM animation clip on the 3D stage.
+ *
+ * A `.vrma` is avatar-independent: it carries humanoid-local rotations, and
+ * `createVRMAnimationClip` retargets them onto this model's normalized bones by
+ * bone name, so a clip made for one VRM plays on another.
+ *
+ * Pinned channels and bone tracks are parked for the duration — a clip and a
+ * per-frame pose both write the same quaternions, and letting them fight would
+ * show up as a twitching arm.
+ *
+ * @param spec - `{ url, name, loop, stop }` from the stage frame.
+ * @returns 1 when playback started, 0 when the clip was unusable.
+ */
+async function startVrmMotion(spec) {
+  const stage = S.vrm
+  if (stage === null || stage.vrm === null) return 0
+  if (spec === null || typeof spec !== 'object') return 0
+  if (spec.stop === true) {
+    finishVrmMotion(stage)
+    return 0
+  }
+  const url = typeof spec.url === 'string' ? spec.url : ''
+  if (url === '') return 0
+  if (stage.motionPending === url) return 0
+  stage.motionPending = url
+  try {
+    const bytes = await fetchVrm(url)
+    const loader = new GLTFLoader()
+    loader.register(parser => new VRMAnimationLoaderPlugin(parser))
+    const gltf = await new Promise((resolve, reject) => loader.parse(bytes, '', resolve, reject))
+    if (S.vrm !== stage) return 0
+    const source = Array.isArray(gltf.userData.vrmAnimations) ? gltf.userData.vrmAnimations[0] : null
+    if (source === null || source === undefined) throw new Error('clip carries no VRM animation')
+    const clip = createVRMAnimationClip(source, stage.vrm)
+    finishVrmMotion(stage)
+    const mixer = new THREE.AnimationMixer(stage.vrm.scene)
+    const action = mixer.clipAction(clip)
+    action.setLoop(spec.loop === true ? THREE.LoopRepeat : THREE.LoopOnce, Infinity)
+    action.clampWhenFinished = true
+    stage.motion = {
+      mixer,
+      action,
+      clip,
+      loop: spec.loop === true,
+      name: typeof spec.name === 'string' ? spec.name : 'motion',
+      elapsed: 0,
+      saved: {
+        pinned: stage.pinned,
+        tracks: stage.tracks,
+        probe: stage.probe,
+        translate: stage.translate,
+        hipsTrack: stage.hipsTrack,
+        moveTrack: stage.moveTrack,
+      },
+    }
+    stage.pinned = new Map()
+    stage.tracks = []
+    stage.probe = new Map()
+    stage.translate = null
+    stage.hipsTrack = null
+    stage.moveTrack = null
+    // The new clip owns the body; the pose the last one ended on is done.
+    stage.clipHold = null
+    action.reset().fadeIn(0.2).play()
+    return 1
+  } catch (error) {
+    console.warn('[dsh-live-tavern] motion clip failed', error)
+    return 0
+  } finally {
+    if (stage.motionPending === url) stage.motionPending = null
+  }
+}
+
+/**
+ * Where the hips sit relative to rest when a clip ends, or null when they are at rest.
+ *
+ * Root motion lands here: a walk finishes somewhere, a crouch finishes low. Dropping it
+ * put her back on her mark at standing height, which undid the clip.
+ *
+ * @param stage - The running VRM stage.
+ * @returns `[x, y, z]` offset in stage units, or null.
+ */
+function heldHipsOffset(stage) {
+  const hips = stage?.hips
+  const rest = stage?.hipsRest
+  if (hips === null || hips === undefined || rest === null || rest === undefined) return null
+  const dx = hips.position.x - rest.x
+  const dy = hips.position.y - rest.y
+  const dz = hips.position.z - rest.z
+  if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4 && Math.abs(dz) < 1e-4) return null
+  return [dx, dy, dz]
+}
+
+/**
+ * Stop the running clip and keep the pose it ended on.
+ *
+ * The clip was generated for the pose at its end — a crouch, a turn, a step to the side.
+ * Resetting the rig to the standing pose discarded that, and restoring the parked channels
+ * then snapped an older pose over it, which read as two motions fighting. The last frame
+ * is what stays now: bone rotations keep the mixer's last write, and the hips' offset is
+ * held as the body's translation until a later frame states one of its own.
+ *
+ * @param stage - The running VRM stage.
+ * @param options - `{ restore: false }` tears the clip down and keeps nothing (disposal).
+ */
+function finishVrmMotion(stage, options = {}) {
+  const running = stage?.motion
+  if (running === null || running === undefined) return
+  // Read the hips before the mixer lets go of them.
+  const held = heldHipsOffset(stage)
+  try {
+    running.action.stop()
+    running.mixer.stopAllAction()
+    running.mixer.uncacheRoot(stage.vrm.scene)
+  } catch {
+    // A mixer from a disposed scene has nothing left to stop.
+  }
+  stage.motion = null
+  if (options.restore === false) return
+  // Bone rotations are deliberately untouched: the mixer's last write is the pose to keep.
+  stage.translate = null
+  stage.clipHold = held === null ? null : { hips: held }
+  stage.hipsTrack = null
+  stage.hipsAnimatedY = 0
+  // The pre-clip channels belong to an older pose; replaying them is the jump this replaced.
+  // The workbench sliders still come back, because the workbench owns them.
+  stage.tracks = []
+  stage.pinned = new Map()
+  stage.pinnedEased = new Map()
+  const saved = running.saved ?? {}
+  stage.probe = saved.probe ?? new Map()
+  stage.moveTrack = null
+}
+
 /** Tear the 3D stage down. */
 function disposeVrm() {
   const stage = S.vrm
   if (stage === null) return
+  finishVrmMotion(stage, { restore: false })
   cancelAnimationFrame(stage.raf)
   try {
     stage.renderer.dispose()
@@ -1871,6 +2485,7 @@ async function startEngineInner() {
   }
   const host = mountCanvasHost(seat, primaryPlacement)
   S.primary = { placement: primaryPlacement, host }
+  applyStageScope(primaryPlacement)
 
   const mask = el('div', { class: 'dsh-l2d-mask', text: `载入 ${config.selected.id} …` })
   seat.append(mask)
@@ -1946,6 +2561,7 @@ async function startEngineInner() {
   installRig()
   installPointerGestures()
   applyDefaults(S.config?.defaults ?? null)
+  applyKeptExpression()
   // One deliberate check beats guessing: a blank canvas with a working bubble has
   // no other symptom.
   window.setTimeout(() => { verifyRender() }, 1200)
@@ -1977,10 +2593,17 @@ async function startEngineInner() {
  * seats (chat column vs sidebar) get a mirror.
  */
 function applyPlacements(list) {
+  // The phone shell has no sidebar column: a stored desktop choice is dropped here
+  // too, so the stage never waits on a seat that cannot exist on that runtime.
+  const placementsWanted = [].concat(list).filter(seat => !isPhoneShell() || seat !== 'sidebar')
+  // Entering the rail no longer opens her page on its own: the Sidebar's start
+  // page offers 「角色」 and the reader picks it. The seat follows the page once it
+  // exists (see `scheduleStageReanchor`).
+  S.appliedPlacements = placementsWanted
   // The 3D stage has no mirrors, but it does need the workbench pane: lending the
   // canvas to it is what lets the art and the sliders share one screen.
   if (S.kind === 'vrm' && S.vrm !== null && S.primary !== null) {
-    const wanted = [].concat(list)
+    const wanted = placementsWanted
     const pane = S.workbenchPane !== null && S.workbenchPane.isConnected ? S.workbenchPane : null
     const target = pane ?? ensureSeat(wanted[0] ?? 'foreground') ?? ensureSeat('foreground')
     if (target === null) return
@@ -1988,6 +2611,7 @@ function applyPlacements(list) {
     if (!target.contains(host)) target.append(host)
     host.dataset.placement = pane === null ? (wanted[0] ?? 'foreground') : 'workbench'
     S.primary = { placement: pane === null ? (wanted[0] ?? 'foreground') : 'workbench', host }
+    applyStageScope(S.primary.placement)
     const box = sizeOf(target)
     S.vrm.renderer.setSize(box.width, box.height, false)
     S.vrm.camera.left = -box.width / 2
@@ -2007,6 +2631,7 @@ function applyPlacements(list) {
     if (!S.workbenchPane.contains(host)) S.workbenchPane.append(host)
     host.dataset.placement = 'workbench'
     S.primary = { placement: 'workbench', host }
+    applyStageScope('workbench')
     for (const mirror of [...S.mirrors]) {
       mirror.host.remove()
       S.mirrors.delete(mirror)
@@ -2017,10 +2642,14 @@ function applyPlacements(list) {
     if (S.frame === 0) S.frame = requestAnimationFrame(mirrorFrame)
     return
   }
-  const wanted = [...new Set(SEATS.filter(seat => [].concat(list).includes(seat)))]
+  const wanted = [...new Set(SEATS.filter(seat => placementsWanted.includes(seat)))]
   if (wanted.length === 0) wanted.push('chat')
   const primary = wanted.includes('foreground') ? 'foreground' : wanted[wanted.length - 1]
-  const mirrored = wanted.filter(seat => seat !== primary && seat !== 'foreground' && primary !== 'foreground')
+  // A column-sized sidebar seat and a viewport-sized backdrop cannot share one
+  // canvas: copying the rail's cut-out into the chat layer would stretch it, and
+  // the other way round would shrink it. Only same-size seats mirror.
+  const mirrored = wanted.filter(seat => seat !== primary && seat !== 'foreground'
+    && primary !== 'foreground' && seat !== 'sidebar' && primary !== 'sidebar')
   S.config.placement = [primary, ...mirrored]
   const primarySeat = ensureSeat(primary)
   if (primarySeat === null) {
@@ -2031,6 +2660,7 @@ function applyPlacements(list) {
   if (!primarySeat.contains(host)) primarySeat.append(host)
   host.dataset.placement = primary
   S.primary = { placement: primary, host }
+  applyStageScope(primary)
   const box = sizeOf(host)
   S.app.renderer.resize(box.width, box.height)
   fitModel()
@@ -2080,6 +2710,7 @@ function mirrorFrame(now) {
 /** Report what this page actually saw, so the Host side can be verified without a console. */
 function reportStatus(extra) {
   const body = {
+    build: CLIENT_BUILD,
     coreLoaded: typeof window.Live2DCubismCore !== 'undefined',
     model: S.config?.selected?.id ?? null,
     placement: S.config?.placement ?? null,
@@ -2109,6 +2740,33 @@ function reportStatus(extra) {
       })(),
     },
     layout: S.layout ? { height: S.layout.height, model: S.layout.model } : null,
+    // Why a placement can end up somewhere unexpected: which anchors the page has,
+    // where the seat really sits, and whether the boot had to degrade.
+    diag: (() => {
+      const seat = S.seats.get('sidebar')
+      const box = seat?.node?.isConnected ? seat.node.getBoundingClientRect() : null
+      return {
+        degraded: S.degraded === true,
+        primary: S.primary?.placement ?? null,
+        anchors: {
+          sidebarSlot: Boolean(document.querySelector('[data-slot="sidebar"]')),
+          sidebarCol: Boolean(document.querySelector('[class*="sidebarCol"]')),
+          tabBody: Boolean(document.querySelector(`[${STAGE_TAB_BODY_ATTR}]`)),
+        },
+        seatBox: box === null
+          ? null
+          : { left: Math.round(box.left), top: Math.round(box.top), width: Math.round(box.width), height: Math.round(box.height) },
+      }
+    })(),
+    // What the fit actually measured, so a wrong-looking stage can be read from here.
+    fit: {
+      baseWidth: Math.round(Number(S.baseWidth ?? 0)),
+      baseHeight: Math.round(Number(S.baseHeight ?? 0)),
+      visibleRel: S.visibleRel ?? null,
+      appliedScale: S.model?.scale?.y ?? null,
+    },
+    // Whether the character's right-Sidebar page is the box the seat sits in.
+    tab: { open: Boolean(S.stageTabBody !== null && S.stageTabBody !== undefined) },
     draw: S.renderReport ?? null,
     expressions: S.config?.selected?.expressions ?? [],
     panel: S.panel !== null,
@@ -2167,6 +2825,40 @@ function positionBubble() {
   const gap = 10
   S.bubble.style.left = `${Math.round(anchorX + S.layout.bubble.x)}px`
   S.bubble.style.bottom = `${Math.max(8, Math.round(window.innerHeight - anchorTop + gap - S.layout.bubble.y))}px`
+}
+
+/**
+ * Publish the bubble's size, opacity and font size as CSS variables.
+ *
+ * The three values come from the Host's settings file, so the same numbers apply
+ * on every page; the variables carry fallbacks so an older Host that does not
+ * send them still renders today's bubble.
+ *
+ * @param config - The `/config` payload; defaults to the loaded one.
+ */
+function applyBubbleStyle(config = S.config) {
+  const clamp = (value, min, max, fallback) => {
+    const number = Number(value)
+    return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback
+  }
+  const alpha = clamp(config?.bubbleOpacity, 0.2, 1, 0.93)
+  const font = clamp(config?.bubbleFontSize, 11, 26, 13)
+  const width = clamp(config?.bubbleWidth, 180, 720, 360)
+  const root = document.documentElement
+  root.style.setProperty('--dsh-l2d-bubble-alpha', String(alpha))
+  root.style.setProperty('--dsh-l2d-bubble-font', `${Math.round(font * 10) / 10}px`)
+  root.style.setProperty('--dsh-l2d-bubble-width', `${Math.round(width)}px`)
+  // A wider or taller bubble hangs from the same anchor, so re-place it rather
+  // than letting the old offset leave it half over her head.
+  if (S.bubble !== null && S.bubble.dataset.show === '1') positionBubble()
+}
+
+/** Drop the bubble variables when the plugin unloads. */
+function clearBubbleStyle() {
+  const root = document.documentElement
+  for (const name of ['--dsh-l2d-bubble-alpha', '--dsh-l2d-bubble-font', '--dsh-l2d-bubble-width']) {
+    root.style.removeProperty(name)
+  }
 }
 
 function showBubble(line) {
@@ -2241,13 +2933,107 @@ function resetFace() {
   }
 }
 
+/**
+ * Read the kept state the Host sends.
+ *
+ * @param raw - `{ params, expression }` from `/config` or from a frame.
+ * @returns Normalized `{ params, expression }`.
+ */
+function normalizePersist(raw) {
+  const params = {}
+  const source = raw?.params
+  if (source !== null && typeof source === 'object' && !Array.isArray(source)) {
+    for (const [id, value] of Object.entries(source)) {
+      const number = Number(value)
+      if (Number.isFinite(number)) params[id] = number
+    }
+  }
+  return {
+    params,
+    expression: typeof raw?.expression === 'string' ? raw.expression : '',
+  }
+}
+
+/** Apply the kept expression once the model is ready. */
+function applyKeptExpression() {
+  const name = S.persist?.expression ?? ''
+  if (name === '' || S.kind === 'vrm' || S.model === null) return
+  if (S.appliedExpression === name) return
+  S.appliedExpression = name
+  S.model.expression(name).catch(() => {
+    // A name the model does not declare simply does not apply.
+  })
+}
+
+/**
+ * Play the clip that belongs to the line just shown.
+ *
+ * The Host holds the frame until its audio exists, so the bubble and the voice
+ * start on the same tick. Browsers still block the first sound until the page is
+ * clicked; that attempt is parked and replayed on the next pointer-down.
+ *
+ * @param frame - The stage frame; only `speech.audio` matters here.
+ */
+function playSpeechAudio(frame) {
+  const url = frame?.speech?.audio
+  if (typeof url !== 'string' || url === '') return
+  // One clip per line: a replayed frame (stream reconnect, a second mounted
+  // renderer) must not start the same recording again — two copies offset by a
+  // few milliseconds sound exactly like a reverb tail.
+  const stamp = `${String(frame.time ?? '')}:${url}`
+  if (globalThis.__dshL2dSpeechStamp === stamp) return
+  globalThis.__dshL2dSpeechStamp = stamp
+  try {
+    if (S.speech !== null && S.speech !== undefined) {
+      S.speech.pause()
+      S.speech.currentTime = 0
+    }
+    const audio = new Audio(url)
+    S.speech = audio
+    const started = audio.play()
+    if (started !== undefined && typeof started.catch === 'function') {
+      started.catch(() => {
+        S.pendingSpeech = audio
+        if (S.speechUnlock !== true) {
+          S.speechUnlock = true
+          document.addEventListener('pointerdown', () => {
+            S.speechUnlock = false
+            const held = S.pendingSpeech
+            S.pendingSpeech = null
+            if (held !== null && held !== undefined) held.play().catch(() => { /* still blocked */ })
+          }, { once: true })
+        }
+      })
+    }
+  } catch (error) {
+    console.warn('[dsh-live-tavern] 声音播放失败', error)
+  }
+}
+
 function applyStage(frame) {
   if (frame === null || typeof frame !== 'object') return
   S.lastStage = frame
+  if (frame.persist !== null && typeof frame.persist === 'object') {
+    S.persist = normalizePersist(frame.persist)
+    S.appliedExpression = ''
+  }
   if (S.kind === 'vrm') applyVrmFrame(frame)
-  if (S.kind !== 'vrm' && typeof frame.expression === 'string' && S.model) {
-    S.model.expression(frame.expression).catch(error => console.warn('[dsh-live-tavern] expression failed', error))
-  } else {
+  if (S.kind === 'vrm' && frame.motion !== null && frame.motion !== undefined) {
+    void startVrmMotion(frame.motion)
+  }
+  // A kept expression outranks the calibrator's pick: the model asked for this face
+  // to stay, so a frame that carries none must not clear it.
+  const keptExpression = S.persist?.expression ?? ''
+  const wantedExpression = typeof frame.expression === 'string' && frame.expression !== ''
+    ? frame.expression
+    : keptExpression
+  if (S.kind !== 'vrm' && wantedExpression !== '') {
+    if (S.model && S.appliedExpression !== wantedExpression) {
+      S.appliedExpression = wantedExpression
+      S.model.expression(wantedExpression).catch(error => console.warn('[dsh-live-tavern] expression failed', error))
+    }
+  } else if (S.kind !== 'vrm') {
+    S.appliedExpression = ''
     resetFace()
   }
   if (S.kind !== 'vrm' && frame.motion && S.model) {
@@ -2284,7 +3070,12 @@ function applyStage(frame) {
     }
   }
   if (typeof frame.animation === 'string' && frame.animation !== '') startAnimation(frame.animation)
-  if (typeof frame.line === 'string' && frame.line !== '') showBubble(frame.line)
+  if (typeof frame.line === 'string' && frame.line !== '') {
+    S.bubbleAt = Number(frame.time) || Date.now()
+    showBubble(frame.line)
+    // Same tick as the bubble: the Host only publishes once the clip exists.
+    playSpeechAudio(frame)
+  }
   if (S.revertTimer !== 0) clearTimeout(S.revertTimer)
   const hold = Number(frame.holdMs) > 0 ? Number(frame.holdMs) : 9000
   S.revertTimer = window.setTimeout(() => {
@@ -2306,6 +3097,19 @@ function subscribeStage() {
       applyStage(JSON.parse(event.data))
     } catch (error) {
       console.warn('[dsh-live-tavern] bad stage frame', error)
+    }
+  })
+  source.addEventListener('speech', (event) => {
+    try {
+      const clip = JSON.parse(event.data)
+      // Only the bubble this clip belongs to may speak: a stale event must not
+      // talk over a newer line.
+      const at = Number(clip?.time)
+      if (!Number.isFinite(at) || Math.abs((S.bubbleAt ?? 0) - at) > 4000) return
+      if (typeof clip?.audio !== 'string' || clip.audio === '') return
+      playSpeechAudio({ time: at, speech: { audio: clip.audio, audioMs: clip.audioMs } })
+    } catch (error) {
+      console.warn('[dsh-live-tavern] bad speech event', error)
     }
   })
   source.addEventListener('open', () => {
@@ -2438,6 +3242,15 @@ function installRig() {
         // Same rule: an unknown id never breaks a frame.
       }
     }
+    // What the model decided to keep: above the rig so a held switch stays held,
+    // below a track so a one-off animation can still move it for a moment.
+    for (const [id, value] of Object.entries(S.persist?.params ?? {})) {
+      try {
+        core.setParameterValueById(handleFor(id), Number(value))
+      } catch {
+        // Same rule again.
+      }
+    }
     // A track owns its parameter for its duration: written last, so it wins over
     // the eased rig value in this same frame.
     stepAnimation(core, handleFor)
@@ -2487,9 +3300,87 @@ function renderPanel() {
   // Intentionally empty: the workbench renders its own results.
 }
 
+/** Attribute on `<html>` that gates every content-clearing rule. */
+const CLEAR_ATTR = 'data-dsh-l2d-clear'
+/** Attribute on the shell's root frame; the clear rules hang off it. */
+const CLEAR_FRAME_ATTR = 'data-dsh-l2d-frame'
+
+/**
+ * Tag the shell's root frame so the clear rules can reach the columns it owns.
+ *
+ * The frame is the root slot's first real element child: the slot itself is a
+ * `display:contents` node, and the hash class names (`pI_x6G_frame`) change with
+ * every release. The same walk the wallpaper plugin uses, kept local so the two
+ * plugins never depend on each other's attributes.
+ */
+function tagClearFrame() {
+  if (typeof document === 'undefined') return
+  let host = null
+  const slot = document.querySelector('[data-slot="root"]')
+  if (slot !== null) {
+    for (const child of slot.children) {
+      const style = child.getAttribute('style')
+      if (style !== null && /display:\s*contents/.test(style)) continue
+      host = child
+      break
+    }
+    if (host === null) host = slot.parentElement
+  }
+  if (host === null) host = document.getElementById('root')?.firstElementChild ?? null
+  // A remount can leave the marker on a dead node, so stale marks go first.
+  for (const marked of document.querySelectorAll(`[${CLEAR_FRAME_ATTR}]`)) {
+    if (marked !== host) marked.removeAttribute(CLEAR_FRAME_ATTR)
+  }
+  if (host !== null && host.getAttribute(CLEAR_FRAME_ATTR) === null) {
+    host.setAttribute(CLEAR_FRAME_ATTR, '')
+  }
+}
+
+/**
+ * Apply the 内容层透明 switch.
+ *
+ * Idempotent: the layout watcher calls `tagClearFrame` on every DOM burst, so a
+ * shell remount re-marks the new frame without touching the attribute while the
+ * same frame is still there.
+ *
+ * @param clear - Whether the content layer should be transparent.
+ */
+function applyContentClear(clear) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (clear === true) {
+    if (root.getAttribute(CLEAR_ATTR) === null) root.setAttribute(CLEAR_ATTR, '')
+    tagClearFrame()
+    return
+  }
+  root.removeAttribute(CLEAR_ATTR)
+  for (const marked of document.querySelectorAll(`[${CLEAR_FRAME_ATTR}]`)) {
+    marked.removeAttribute(CLEAR_FRAME_ATTR)
+  }
+}
+
+/**
+ * Apply the sidebar-stage scope.
+ *
+ * The rail's own fills are opaque, so a seat behind them is invisible: while the
+ * stage lives in the sidebar those fills clear, and only then. Picking another
+ * placement removes the attribute and the rail returns to stock.
+ *
+ * @param placement - The placement that owns the canvas.
+ */
+function applyStageScope(placement) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (placement === 'sidebar') root.setAttribute('data-dsh-l2d-stage', 'sidebar')
+  else root.removeAttribute('data-dsh-l2d-stage')
+}
+
 function watchLayout() {
   const reattach = () => {
     if (S.disposed) return
+    // The frame is re-rendered with the shell, so keep the marker on whatever
+    // element is current before anything else looks at the layout.
+    if (S.config?.contentTransparent === true) tagClearFrame()
     if (S.app === null && S.vrm === null) {
       // The shell can mount after this plugin activates; retry the stage then.
       if (!S.starting && S.config !== null && anchorFor(S.config.placement[0] ?? 'chat') !== null) {
@@ -2548,6 +3439,16 @@ async function refreshDisplayConfig() {
     || S.config?.textureLod !== next?.textureLod
     || S.config?.lookAtPointer !== next?.lookAtPointer
   S.config = { ...S.config, ...next }
+  // The kept state is not a config member the renderer reads: adopt it here, or a
+  // settings save would silently drop what the model asked to keep.
+  if (next.stageState !== undefined && next.stageState !== null) S.persist = normalizePersist(next.stageState)
+  // The transparency switch is a document-level style, so it adopts instantly —
+  // before the early returns below (a 3D stage or a still-booting one skips the
+  // placement refresh but must still honour the switch).
+  applyContentClear(next.contentTransparent === true)
+  // Bubble size, opacity and font size need no rebuild: they are three CSS
+  // variables the running page can adopt on the spot.
+  applyBubbleStyle()
   if (needsEngine) {
     // Swapping the model or the texture level rebuilds the engine, which only a
     // reload does cleanly.
@@ -2595,10 +3496,17 @@ async function mountSettingsForm(container) {
     saved.dataset.state = 'busy'
     saved.textContent = '保存中…'
     try {
+      // Only the declared fields travel back: `values` may carry display-only
+      // entries, and posting one of those fails the whole save.
+      const patch = Object.fromEntries(
+        payload.fields
+          .filter(field => Object.prototype.hasOwnProperty.call(draft, field.key))
+          .map(field => [field.key, draft[field.key]]),
+      )
       await fetchJson(`${API}/settings`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(draft),
+        body: JSON.stringify(patch),
       })
       saved.dataset.state = 'ok'
       saved.textContent = '已保存'
@@ -2615,20 +3523,144 @@ async function mountSettingsForm(container) {
     timer = window.setTimeout(flush, delay)
   }
 
-  const grid = el('div', { class: 'grid' })
-  // The scope row follows the cross-session switch without rebuilding the form.
-  let scopeCell = null
+  // A sample line that follows the three bubble numbers while they are edited, so
+  // the size is judged before it is saved instead of after.
+  let syncBubblePreview = null
+  const mountBubblePreview = () => {
+    const wrap = el('div', { class: 'bubble-preview' })
+    const line = el('div', { class: 'bubble-preview-line', text: '门锁是从内侧坏的。窗帘上有干掉的泥。' })
+    wrap.append(line)
+    const read = (value, min, max, fallback) => {
+      const number = Number(value)
+      return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback
+    }
+    const sync = () => {
+      line.style.fontSize = `${read(draft.bubbleFontSize, 11, 26, 13)}px`
+      line.style.maxWidth = `${read(draft.bubbleWidth, 180, 720, 360)}px`
+      line.style.background = `rgba(255,255,255,${read(draft.bubbleOpacity, 0.2, 1, 0.93)})`
+    }
+    sync()
+    syncBubblePreview = sync
+    return wrap
+  }
+  // Every visible field belongs to a collapsible section: the form is one stack of
+  // folds instead of a wall of rows, and a section can hold more than fields (the
+  // bubble preview, the cross-session picker, the worldbook diagnostics).
+  const sectionBlocks = new Map()
+  const sectionFor = (id) => {
+    const existing = sectionBlocks.get(id)
+    if (existing !== undefined) return existing
+    const meta = SETTINGS_SECTIONS[id] ?? { title: String(id) }
+    const fold = mountFold({ id, title: meta.title, hint: meta.hint, open: meta.open })
+    const made = el('div', { class: 'grid' })
+    fold.body.append(made)
+    if (id === 'bubble') fold.body.append(mountBubblePreview())
+    const entry = { fold, grid: made }
+    sectionBlocks.set(id, entry)
+    return entry
+  }
+  // A field may depend on another one: 记忆范围 and 带人设模式 only mean something
+  // while the cross-session mode is on. They are built but hidden, and revealed the
+  // moment their switch flips — without rebuilding the whole form.
+  const voiceHint = el('p', { class: 'tts-hint', text: '' })
+  /**
+   * Warn — never block — when the chosen voice does not list the chosen language.
+   *
+   * `languages` is only present for voices the published voice list describes; a
+   * voice with no coverage data stays silent, because guessing would be worse than
+   * saying nothing.
+   */
+  function updateVoiceLanguageHint() {
+    const code = String(draft.ttsLanguage ?? 'auto')
+    const voiceId = String(draft.ttsVoice ?? '')
+    const info = S.ttsVoiceInfo instanceof Map ? S.ttsVoiceInfo.get(voiceId) : undefined
+    if (code === 'auto' || info === undefined || !Array.isArray(info.languages)) {
+      voiceHint.textContent = ''
+      voiceHint.dataset.state = ''
+      return
+    }
+    if (info.languages.includes(code)) {
+      voiceHint.textContent = ''
+      voiceHint.dataset.state = ''
+      return
+    }
+    const label = TTS_LANGUAGE_LABELS[code] ?? code
+    const covered = info.languages.map(item => TTS_LANGUAGE_LABELS[item] ?? item).join('、')
+    voiceHint.dataset.state = 'warn'
+    voiceHint.textContent = `提示：${info.name ?? voiceId} 的音色表只标注了 ${covered}，没有${label}。照样能念，但可能不太自然——换一个多语种音色会更稳，这条只是提示哦。`
+  }
+  const conditionalCells = []
+  /**
+   * A `<select>` filled from the Host, plus a free-text escape hatch.
+   *
+   * A `<datalist>` was the first try and it misbehaved exactly as feared: with a
+   * value already in the box, browsers filter suggestions by that text, so the
+   * list looked like it held a single entry. A real select always shows every
+   * choice; picking 「自定义 id…」 swaps in a text field for a cloned voice id.
+   */
+  const buildChoiceControl = (field, initial, onChange) => {
+    const wrap = el('div', { class: 'choice' })
+    const select = el('select', { id: `dsh-l2d-set-${field.key}` })
+    const custom = el('input', {
+      type: 'text',
+      placeholder: '自定义 id',
+      'aria-label': `${field.label}（自定义）`,
+    })
+    custom.style.display = 'none'
+    select.append(el('option', { value: String(initial ?? ''), text: String(initial ?? '读取中…') }))
+    select.value = String(initial ?? '')
+    let customMode = false
+    select.addEventListener('change', () => {
+      if (select.value === '__custom__') {
+        customMode = true
+        custom.style.display = ''
+        custom.value = ''
+        custom.focus()
+        return
+      }
+      customMode = false
+      custom.style.display = 'none'
+      onChange(select.value)
+    })
+    custom.addEventListener('input', () => {
+      if (customMode) onChange(custom.value)
+    })
+    wrap.append(select, custom)
+    return {
+      node: wrap,
+      key: field.key,
+      select,
+      custom,
+      set(value) {
+        const text = String(value ?? '')
+        const known = [...select.options].some(option => option.value === text)
+        if (!known && text !== '') select.prepend(el('option', { value: text, text }))
+        select.value = text
+        customMode = false
+        custom.style.display = 'none'
+      },
+    }
+  }
+  /** Fields whose choices come from the Host (`ttsModels` / `ttsVoices`). */
+  const optionLists = new Map()
+  /** Whether one `showWhen` rule holds for the current draft. */
+  const ruleHolds = (rule) => {
+    const value = draft[rule.key]
+    if (rule.notEquals !== undefined) return value !== rule.notEquals
+    if (Array.isArray(rule.oneOf)) return rule.oneOf.includes(value)
+    return value === rule.equals
+  }
+  const syncConditionals = () => {
+    for (const entry of conditionalCells) {
+      entry.cell.style.display = ruleHolds(entry.showWhen) ? '' : 'none'
+    }
+  }
   for (const field of payload.fields) {
     if (field.hidden === true) continue
-    // A field can depend on another one: 记忆范围 only means something while the
-    // cross-session mode is on, so it hides otherwise instead of explaining itself.
-    const shown = field.showWhen === undefined || draft[field.showWhen.key] === field.showWhen.equals
     const cell = el('div', { class: field.wide === true ? 'field wide' : 'field' })
-    if (field.key === 'memoryScope') {
-      scopeCell = cell
-      if (!shown) cell.style.display = 'none'
-    } else if (!shown) {
-      continue
+    if (field.showWhen !== undefined) {
+      conditionalCells.push({ cell, showWhen: field.showWhen })
+      if (!ruleHolds(field.showWhen)) cell.style.display = 'none'
     }
     // The description is a hover hint, not a line: it would double the height of
     // every row for text that is read once.
@@ -2639,11 +3671,25 @@ async function mountSettingsForm(container) {
       label.dataset.hint = '1'
     }
     cell.append(label)
-    const control = buildControl(field, draft[field.key], (value) => {
+    const onChange = (value) => {
       draft[field.key] = value
+      if (field.section === 'bubble') syncBubblePreview?.()
+      // Transparency is a document attribute, not a saved number the stage has
+      // to reload: flip it now so the switch shows what it does before saving.
+      if (field.key === 'contentTransparent') applyContentClear(value === true)
+      syncConditionals()
       commit(field.kind === 'text' ? 500 : 120)
-    })
+    }
+    const control = typeof field.optionsFrom === 'string'
+      ? buildChoiceControl(field, draft[field.key], onChange)
+      : buildControl(field, draft[field.key], onChange)
     cell.append(control.node)
+    if (typeof field.optionsFrom === 'string') optionLists.set(field.optionsFrom, control)
+    if (field.key === 'ttsVoice' || field.key === 'ttsLanguage') {
+      const target = control.select ?? control.node
+      target?.addEventListener?.('change', () => updateVoiceLanguageHint())
+      control.node?.querySelector?.('select')?.addEventListener?.('change', () => updateVoiceLanguageHint())
+    }
     const fallback = defaults[field.key]
     cell.append(fallback === undefined
       ? el('span', { class: 'pad' })
@@ -2655,12 +3701,326 @@ async function mountSettingsForm(container) {
           event.preventDefault()
           draft[field.key] = fallback
           control.set(fallback)
+          if (field.section === 'bubble') syncBubblePreview?.()
           commit(60)
         },
       }))
-    grid.append(cell)
+    sectionFor(field.section ?? 'stage').grid.append(cell)
   }
 
+  // 「试听」：先把表单存一次（Key 可能是刚粘进去的），再让宿主用当前设置合成一句。
+  // 合成结果以 data URL 回来，用一次点击手势就能播放，不需要额外的静态路由。
+  const mountTtsTest = () => {
+    const wrap = el('div', { class: 'tts-test' })
+    const button = el('button', {
+      type: 'button',
+      text: '试听一句',
+      title: '用当前的模型、音色、语速与 API Key 合成一句话并当场播放',
+    })
+    const status = el('span', { class: 'status', text: '还没试过' })
+    let playing = null
+    button.addEventListener('click', async () => {
+      button.disabled = true
+      status.dataset.state = 'busy'
+      status.textContent = '合成中…'
+      try {
+        await flush()
+        const answer = await fetchJson(`${API}/tts/test`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        if (answer?.ok !== true) {
+          status.dataset.state = 'error'
+          status.textContent = answer?.error ?? '合成失败'
+          return
+        }
+        status.dataset.state = 'ok'
+        status.textContent = `${answer.ms} ms · ${Math.round(Number(answer.bytes) / 1024)} KB · ${answer.model} / ${answer.voice}`
+        if (playing !== null) {
+          try {
+            playing.pause()
+          } catch {
+            // A finished clip has nothing to pause.
+          }
+        }
+        playing = new Audio(String(answer.audio))
+        try {
+          await playing.play()
+        } catch (error) {
+          status.dataset.state = 'error'
+          status.textContent = `播放被挡住：${error?.message ?? error}——点一下页面再按试听`
+        }
+      } catch (error) {
+        status.dataset.state = 'error'
+        status.textContent = `试听失败：${error?.message ?? error}`
+      } finally {
+        button.disabled = false
+      }
+    })
+    wrap.append(button, status)
+    return wrap
+  }
+  // 克隆音色：上传一段 10～20 秒的干净人声，平台回一个 voice id，它只属于所选模型。
+  const mountTtsClone = () => {
+    const wrap = el('div', { class: 'tts-clone' })
+    const head = el('div', { class: 'tts-clone-head' })
+    const file = el('input', { type: 'file', accept: 'audio/*', class: 'tts-clone-file' })
+    const name = el('input', { type: 'text', placeholder: '音色名（字母数字，≤10）', maxlength: '10' })
+    // The clone is bound to one model at creation, so the model is a choice here
+    // rather than something inherited silently from the voice field above.
+    const model = el('select', { class: 'tts-clone-model', 'aria-label': '复刻音色绑定的模型' })
+    const button = el('button', { type: 'button', text: '克隆音色', title: '把选中的音频样本交给平台复刻成新音色' })
+    const status = el('span', { class: 'status', text: '选一段 10～20 秒的清晰人声' })
+    const list = el('div', { class: 'tts-clone-list' })
+    const row = el('div', { class: 'tts-clone-row-edit' })
+    row.append(model, button)
+    head.append(file, name)
+    wrap.append(head, row, status, list)
+    let picked = null
+
+    const readAsDataUrl = (blob) => new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result ?? ''))
+      reader.onerror = () => reject(new Error('读取音频失败'))
+      reader.readAsDataURL(blob)
+    })
+
+    file.addEventListener('change', () => {
+      picked = file.files?.[0] ?? null
+      if (picked === null) return
+      const base = picked.name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 10)
+      if (name.value === '') name.value = base === '' ? 'myvoice' : base
+      status.dataset.state = ''
+      status.textContent = `${picked.name} · ${Math.round(picked.size / 1024)} KB`
+    })
+
+    const renderList = (voices) => {
+      list.replaceChildren(...voices.map((voice) => {
+        const row = el('div', { class: 'tts-clone-row' })
+        row.append(el('span', { class: 'tts-clone-name', text: voice.name ?? voice.id }))
+        row.append(el('span', { class: 'tts-clone-model', text: voice.targetModel ?? '' }))
+        if (typeof voice.sampleUrl === 'string' && voice.sampleUrl !== '') {
+          const size = Number(voice.sampleBytes) > 0 ? `（${Math.round(Number(voice.sampleBytes) / 1024)} KB）` : ''
+          row.append(el('a', {
+            class: 'tts-clone-sample',
+            href: `${voice.sampleUrl}&download=1`,
+            download: voice.sample ?? '',
+            text: '样本',
+            title: `下载当初用于克隆的参考录音${size}`,
+          }))
+        }
+        if (typeof voice.sampleUrl === 'string' && voice.sampleUrl !== '') {
+          // A clone belongs to one model only. The saved recording is what lets the
+          // same voice exist on a second model, so offer that right here.
+          const reclone = el('button', {
+            type: 'button',
+            class: 'tts-clone-del',
+            text: '再克隆',
+            title: '用这份样本，在「克隆到」下拉选中的模型上再建一个音色',
+          })
+          reclone.addEventListener('click', async () => {
+            reclone.disabled = true
+            status.dataset.state = 'busy'
+            status.textContent = `用 ${voice.name ?? voice.id} 的样本，在 ${model.value} 上再克隆…`
+            try {
+              const response = await fetch(`${API}/tts/voices/sample?voiceId=${encodeURIComponent(voice.id)}`, { cache: 'no-store' })
+              if (!response.ok) throw new Error(`取样本失败：HTTP ${response.status}`)
+              const audio = await readAsDataUrl(await response.blob())
+              const prefix = String(voice.name ?? 'clone').replace(/[^A-Za-z0-9]/g, '').slice(0, 10) || 'clone'
+              const answer = await fetchJson(`${API}/tts/voices/clone`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  audio,
+                  prefix,
+                  label: `${voice.name ?? voice.id} · ${model.value}`,
+                  targetModel: model.value,
+                }),
+              })
+              if (answer?.ok !== true) throw new Error(answer?.error ?? '再克隆失败')
+              renderList(Array.isArray(answer.voices) ? answer.voices : [])
+              await S.refreshTtsOptions?.({ refresh: true })
+              status.dataset.state = 'ok'
+              status.textContent = `已在 ${model.value} 上新建：${answer.voice.name}`
+            } catch (error) {
+              status.dataset.state = 'error'
+              status.textContent = `再克隆失败：${error?.message ?? error}`
+            } finally {
+              reclone.disabled = false
+            }
+          })
+          row.append(reclone)
+        }
+        const remove = el('button', { type: 'button', class: 'tts-clone-del', text: '✕', title: '删除这个克隆音色' })
+        remove.addEventListener('click', async () => {
+          remove.disabled = true
+          try {
+            const answer = await fetchJson(`${API}/tts/voices/delete`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ voiceId: voice.id }),
+            })
+            if (answer?.ok !== true) throw new Error(answer?.error ?? '删除失败')
+            renderList(Array.isArray(answer.voices) ? answer.voices : [])
+            await S.refreshTtsOptions?.({ refresh: true })
+          } catch (error) {
+            status.dataset.state = 'error'
+            status.textContent = `删除失败：${error?.message ?? error}`
+          }
+        })
+        row.append(remove)
+        return row
+      }))
+    }
+
+    void (async () => {
+      try {
+        const answer = await fetchJson(`${API}/tts/voices`)
+        const models = Array.isArray(answer?.models) && answer.models.length > 0
+          ? answer.models
+          : [draft.ttsModel].filter(Boolean)
+        model.replaceChildren(...models.map(id => el('option', { value: String(id), text: String(id) })))
+        model.value = models.includes(draft.ttsModel) ? draft.ttsModel : models[0]
+        renderList(Array.isArray(answer?.voices) ? answer.voices : [])
+      } catch {
+        // No key or no host: keep the current model and the empty list.
+        model.replaceChildren(el('option', { value: String(draft.ttsModel ?? ''), text: String(draft.ttsModel ?? '') }))
+      }
+    })()
+
+    button.addEventListener('click', async () => {
+      if (picked === null) {
+        status.dataset.state = 'error'
+        status.textContent = '先选一段音频样本'
+        return
+      }
+      if (picked.size > 10 * 1024 * 1024) {
+        status.dataset.state = 'error'
+        status.textContent = '样本太大（上限 10 MB）'
+        return
+      }
+      button.disabled = true
+      status.dataset.state = 'busy'
+      status.textContent = '上传并复刻中…'
+      try {
+        const audio = await readAsDataUrl(picked)
+        const answer = await fetchJson(`${API}/tts/voices/clone`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            audio,
+            prefix: name.value.trim(),
+            label: name.value.trim(),
+            targetModel: model.value,
+          }),
+        })
+        if (answer?.ok !== true) throw new Error(answer?.error ?? '克隆失败')
+        status.dataset.state = 'ok'
+        const boundTo = answer.voice.targetModel ?? model.value
+        const mismatch = boundTo !== draft.ttsModel
+        status.textContent = `完成：${answer.voice.name} · ${answer.voice.id}${mismatch ? `（绑定在 ${boundTo} 上；要用它请把上面的语音模型也切成这个）` : ''}`
+        renderList(Array.isArray(answer.voices) ? answer.voices : [])
+        // Refresh either way: a clone made for another model still belongs in that
+        // model's list, and the dropdown must not keep serving a stale one.
+        // Only a same-model clone is adopted as the current voice; switching
+        // silently would surprise the person who just chose a model.
+        if (!mismatch) draft.ttsVoice = answer.voice.id
+        await S.refreshTtsOptions?.({ refresh: true })
+        if (!mismatch) {
+          optionLists.get('ttsVoices')?.set?.(answer.voice.id)
+          commit(60)
+        } else {
+          // The voice exists, but under another model — offer the switch instead of
+          // leaving the person hunting for it in a dropdown that will never show it.
+          const jump = el('button', { type: 'button', class: 'tts-clone-jump', text: `切到 ${boundTo}` })
+          jump.addEventListener('click', async () => {
+            jump.disabled = true
+            draft.ttsModel = boundTo
+            draft.ttsVoice = answer.voice.id
+            optionLists.get('ttsModels')?.set?.(boundTo)
+            await S.refreshTtsOptions?.({ refresh: true })
+            optionLists.get('ttsVoices')?.set?.(answer.voice.id)
+            commit(60)
+            status.dataset.state = 'ok'
+            status.textContent = `已切换到 ${boundTo}，音色：${answer.voice.name}`
+          })
+          status.append(' ', jump)
+        }
+      } catch (error) {
+        status.dataset.state = 'error'
+        status.textContent = `克隆失败：${error?.message ?? error}`
+      } finally {
+        button.disabled = false
+      }
+    })
+    return wrap
+  }
+  // Dynamic choices: models and voices come from the Host (live model list plus the
+  // bundled voice catalog), so nothing has to be typed from memory.
+  if (optionLists.size > 0) {
+    const fill = (entry, rows) => {
+      if (entry === undefined || entry.select === undefined) return
+      const value = String(draft[entry.key] ?? '')
+      const options = rows.slice(0, 400).map(row => el('option', {
+        value: String(row.id),
+        text: row.name === undefined || String(row.name) === '' ? String(row.id) : `${row.id} · ${row.name}`,
+      }))
+      entry.select.replaceChildren(...options, el('option', { value: '__custom__', text: '（自定义 id…）' }))
+      // Keep the saved value selectable even when the current list does not carry it
+      // (a cloned voice, or a model whose voices this catalog does not know).
+      if (value !== '' && !rows.some(row => String(row.id) === value)) {
+        entry.select.prepend(el('option', { value, text: value }))
+      }
+      const target = value === '' ? (rows[0] === undefined ? '__custom__' : String(rows[0].id)) : value
+      entry.select.value = target
+      entry.custom.style.display = target === '__custom__' ? '' : 'none'
+      if (target === '__custom__') entry.custom.value = value
+    }
+    const refreshTtsOptions = async (options = {}) => {
+      let data
+      try {
+        // After a clone/delete the account's voice set just changed: ask the Host
+        // to skip its cache instead of showing a list that is up to a minute old.
+        data = await fetchJson(`${API}/tts/options${options.refresh === true ? '?refresh=1' : ''}`, { cache: 'no-store' })
+      } catch (error) {
+        console.info('[dsh-live-tavern] TTS options unavailable:', error?.message ?? error)
+        return false
+      }
+      const models = Array.isArray(data?.models) ? data.models : []
+      const voicesByModel = data?.voicesByModel ?? {}
+      fill(optionLists.get('ttsModels'), models)
+      const voices = voicesByModel[String(draft.ttsModel ?? '')]
+      fill(optionLists.get('ttsVoices'), Array.isArray(voices) ? voices : [])
+      // Remember every voice of every model: the hint needs the language coverage
+      // of whatever is selected, including voices of models not currently shown.
+      S.ttsVoiceInfo = new Map()
+      for (const list of Object.values(voicesByModel)) {
+        if (!Array.isArray(list)) continue
+        for (const voice of list) {
+          if (typeof voice?.id === 'string') S.ttsVoiceInfo.set(voice.id, voice)
+        }
+      }
+      updateVoiceLanguageHint()
+      return true
+    }
+    // The clone block refreshes the same lists after creating or deleting a voice.
+    S.refreshTtsOptions = refreshTtsOptions
+    void refreshTtsOptions()
+    const modelSelect = optionLists.get('ttsModels')?.select
+    if (modelSelect !== undefined) {
+      modelSelect.addEventListener('change', () => {
+        void refreshTtsOptions()
+      })
+    }
+  }
+  // The cross-session picker and the worldbook diagnostics belong to their own
+  // section: the numbers and the thing they control live in one fold.
+  sectionFor('director').fold.body.append(mountDirectorModelPicker(draft, commit))
+  sectionFor('worldbook').fold.body.append(mountWorldbookBlock())
+  sectionFor('voice').fold.body.append(voiceHint)
+  sectionFor('voice').fold.body.append(mountTtsTest())
+  sectionFor('voice').fold.body.append(mountTtsClone())
   const reload = el('button', {
     type: 'button',
     text: '重新加载页面',
@@ -2678,16 +4038,27 @@ async function mountSettingsForm(container) {
       setTimeout(() => { recenter.textContent = '全部归位' }, 900)
     },
   })
-  container.append(
-    grid,
-    mountDirectorModelPicker(draft, commit),
-    el('div', { class: 'actions' }, [reload, recenter, saved]),
-  )
-  container.append(mountLayoutBlock())
-  container.append(mountWorldbookBlock())
+  // Each button lives in the block it acts on: reload rebuilds the stage, and the
+  // reset only touches what the 位置 block holds. A shared strip at the bottom made
+  // both look unrelated to their own numbers.
+  sectionFor('stage').fold.body.append(el('div', { class: 'actions' }, [reload]))
+  const layout = mountLayoutBlock()
+  layout.body.append(el('div', { class: 'actions' }, [recenter]))
+  // Built last: appending the two buttons above may have created a section, and the
+  // list has to hold every fold that exists by the time it mounts.
+  const sectionNodes = [
+    ...SETTINGS_SECTION_ORDER.map(id => sectionBlocks.get(id)?.fold.node),
+    // A section the table has not seen yet still renders, after the known ones.
+    ...[...sectionBlocks.entries()].filter(([id]) => !SETTINGS_SECTION_ORDER.includes(id)).map(([, entry]) => entry.fold.node),
+  ].filter(node => node !== undefined)
+
+  container.append(...sectionNodes)
+  container.append(layout.node)
   // The workbench is a three-pane desktop editor; the phone shell has no room for it and the
   // Host does not serve its routes there.
   if (S.config?.capabilities?.workbench !== false) container.append(mountWorkbenchLauncher())
+  // The save status belongs to the form as a whole, not to any one block.
+  container.append(el('div', { class: 'actions' }, [saved]))
 }
 
 /**
@@ -2795,9 +4166,6 @@ function buildControl(field, value, onChange) {
     input.checked = value === true
     input.addEventListener('change', () => {
       onChange(input.checked)
-      if (field.key === 'director' && scopeCell !== null) {
-        scopeCell.style.display = input.checked ? '' : 'none'
-      }
     })
     // The old inline note doubled the row height for a sentence read once: the
     // description is now a hover hint, and the control is a real switch.
@@ -2891,8 +4259,11 @@ function buildControl(field, value, onChange) {
  * where the transcript covers her body and body drag cannot reach it.
  */
 function mountLayoutBlock() {
-  const block = el('div', { class: 'block' })
-  block.append(el('h3', { text: '位置' }))
+  const { node, body } = mountFold({
+    id: 'layout',
+    title: '位置',
+    hint: '角色与气泡在这个浏览器里的位置与身高，不影响别的窗口；双击舞台也能归位',
+  })
   const grid = el('div', { class: 'grid' })
   const entries = []
 
@@ -2948,8 +4319,9 @@ function mountLayoutBlock() {
   addSlider('bubble', 'y', '气泡垂直', 900, { hint: '台词气泡上下偏移；正值往下，范围 ±900px' })
   S.layoutSliders = entries
   previewBubble(true)
-  block.append(grid)
-  return block
+  body.append(grid)
+  // The caller mounts the reset button into `body`: it belongs with these sliders.
+  return { node, body }
 }
 
 /** One place that moves the stage, so every control agrees. */
@@ -3065,7 +4437,8 @@ function parameterRangeOf(id) {
  */
 function mountDirectorModelPicker(draft, commit) {
   const row = el('div', { class: 'field picker' })
-  const pickerLabel = el('label', { text: '跨会话模型' })
+  // The fold is already titled 跨会话模型; this row names what it picks.
+  const pickerLabel = el('label', { text: '场外模型' })
   pickerLabel.title = '场外模型：单独选 provider、模型与思考强度；留空则跟随本会话的模型'
   pickerLabel.dataset.hint = '1'
   row.title = pickerLabel.title
@@ -4098,8 +5471,8 @@ function mountWorkbenchPresets(rows, touched) {
  * the answer only shows up in the reply, long after the decision was made.
  */
 function mountWorldbookBlock() {
-  const block = el('div', { class: 'block' })
-  block.append(el('h3', { text: '世界书诊断' }))
+  // The fold it is mounted into is titled 世界书; a second heading would repeat it.
+  const block = el('div', { class: 'wb-block' })
   const head = el('p', { class: 'status', text: '读取中…' })
   const body = el('div', { class: 'wb' })
   const refresh = el('button', {
@@ -4165,14 +5538,17 @@ function mountWorldbookBlock() {
 
 /** Settings entry point: a button that opens the workbench screen. */
 function mountWorkbenchLauncher() {
-  const block = el('div', { class: 'block' })
-  block.append(el('h3', { text: '参数工作台' }))
-  block.append(el('button', {
+  const { node, body } = mountFold({
+    id: 'workbench',
+    title: '参数工作台',
+    hint: '逐通道标定：看每个参数到底做了什么，并保存成预设',
+  })
+  body.append(el('button', {
     class: 'primary',
     text: '打开参数工作台',
     onclick: () => openWorkbench(),
   }))
-  return block
+  return node
 }
 
 /** Slot component: a React shell that owns one DOM subtree. */
@@ -4272,6 +5648,7 @@ async function waitForModelFile(url) {
 async function boot() {
   try {
     S.config = await fetchConfig()
+    S.persist = normalizePersist(S.config?.stageState)
   } catch (error) {
     // Give up only after the retry window: the Host is not answering at all.
     showNotice('Live Tavern：宿主没有响应（dsh web 可能还没起来），刷新页面会再试一次。')
@@ -4279,6 +5656,8 @@ async function boot() {
     return
   }
   if (S.disposed) return
+  applyBubbleStyle(S.config)
+  applyContentClear(S.config.contentTransparent === true)
   preloadVrm(S.config)
   // Booting the stage must not hold up the plugin table: the shell may still
   // be mounting, and the layout watcher starts it as soon as it can.
@@ -4319,6 +5698,33 @@ export async function apply(ctx) {
         order: 40,
       }, SettingsSection)))
     }
+    // The character's own page in the right Sidebar. `ctx.inject` rather than the
+    // plugin's `inject` list: a phone shell or a future layout without that column
+    // must still get the stage, just never this tab.
+    if (typeof ctx.inject === 'function') {
+      ctx.inject(['slots', 'sidebarRightTabs', 'sidebarRight'], (scope) => {
+        S.sidebarRight = scope.sidebarRight
+        scope.effect(() => scope.sidebarRightTabs.register({
+          id: STAGE_TAB_ID,
+          kind: STAGE_TAB_KIND,
+          priority: 'extension',
+          title: () => '角色',
+          // An entry on the Sidebar's start page: with 「侧栏」 selected the reader
+          // opens her page when they want it, instead of the stage taking a tab by
+          // itself the moment the placement changes.
+          guide: [{
+            id: 'live-tavern-stage',
+            order: 40,
+            title: () => '角色',
+            description: () => '让她站在侧栏的这个选项卡里',
+          }],
+        }), 'dsh-live-tavern: stage tab type')
+        scope.effect(() => scope.slots.inject('sidebar.right.pane.tab', () => scope.slots.register({
+          name: 'sidebar.right.pane.tab',
+          key: STAGE_TAB_ID,
+        }, StageTabBody)), 'dsh-live-tavern: stage tab body')
+      })
+    }
     // Activation itself must never wait on the Host: the shell's boot probe treats a slow or
     // rejected plugin activation as a failed boot. Everything network-bound runs in boot(),
     // which retries instead of throwing.
@@ -4358,6 +5764,15 @@ function dispose() {
   S.revertTimer = 0
   S.bubble?.remove()
   S.bubble = null
+  try {
+    S.speech?.pause?.()
+  } catch {
+    // A finished clip has nothing left to pause.
+  }
+  S.speech = null
+  S.pendingSpeech = null
+  clearBubbleStyle()
+  applyContentClear(false)
   S.dragBox = null
   S.pointerGestures = false
   removeRig()
@@ -4374,10 +5789,12 @@ function dispose() {
   S.kind = null
   S.model = null
   for (const entry of S.seats.values()) {
+    entry.boxObserver?.disconnect?.()
     entry.node?.remove?.()
     if (entry.marker) entry.anchor?.removeAttribute?.('data-dsh-l2d-anchor')
   }
   S.seats.clear()
+  applyStageScope(null)
   S.host.clear()
   S.panel?.remove()
   S.panel = null

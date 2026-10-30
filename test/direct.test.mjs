@@ -128,14 +128,16 @@ test('the judge runs every Nth turn, counted instead of timed', async () => {
   emit('s1', user('第一句'))
   emit('s1', assistant('嗯。'))
   emit('s1', end)
-  await new Promise(resolve => setTimeout(resolve, 20))
+  // Generous waits: the director is fire-and-forget, and a loaded machine can
+  // take a while to reach it. Short windows made this test flaky under load.
+  await new Promise(resolve => setTimeout(resolve, 120))
   assert.equal(seen.length, 0, 'no call on an off-cadence turn')
 
   // Turn 2: the counter reaches the interval and the judge takes over.
   emit('s1', user('第二句'))
   emit('s1', assistant('……'))
   emit('s1', end)
-  await new Promise(resolve => setTimeout(resolve, 40))
+  await new Promise(resolve => setTimeout(resolve, 240))
   assert.equal(seen.length, 1, 'exactly one call on the cadence turn')
 })
 

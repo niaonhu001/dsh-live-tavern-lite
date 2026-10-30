@@ -1,0 +1,745 @@
+{
+  "version": 2,
+  "source": "https://platform.qianwenai.com/docs/developer-guides/speech/voice-list/qwen-audio-tts",
+  "fetchedAt": "2026-10-26T12:54:21.381Z",
+  "models": [
+    {
+      "id": "qwen-audio-3.1-tts-plus",
+      "voices": [
+        {
+          "id": "longanlingxin_v3.1",
+          "name": "龙安灵心_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "xunanchuan_v3.1",
+          "name": "许南川",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanhuan_v3.1",
+          "name": "龙安欢_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanfengyue_v3.1",
+          "name": "龙安风悦_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        }
+      ]
+    },
+    {
+      "id": "qwen-audio-3.1-tts-flash",
+      "voices": [
+        {
+          "id": "longanhuan_v3.1",
+          "name": "龙安欢_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh",
+            "ja",
+            "ko",
+            "fr",
+            "de",
+            "pt",
+            "it",
+            "vi"
+          ]
+        },
+        {
+          "id": "longanlingxin_v3.1",
+          "name": "龙安灵心_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh",
+            "ja",
+            "ko",
+            "fr",
+            "de",
+            "pt",
+            "it",
+            "vi"
+          ]
+        },
+        {
+          "id": "longanfengyue_v3.1",
+          "name": "龙安风悦_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh",
+            "ja",
+            "ko",
+            "fr",
+            "de",
+            "pt",
+            "it",
+            "vi"
+          ]
+        },
+        {
+          "id": "xunanchuan_v3.1",
+          "name": "许南川",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh",
+            "ja",
+            "ko",
+            "fr",
+            "de",
+            "pt",
+            "it",
+            "vi"
+          ]
+        },
+        {
+          "id": "yuxiaoyun_v3.1",
+          "name": "于小云",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "qiaoxiaojiao_v3.1",
+          "name": "乔小娇",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "xiaxiaochen_v3.1",
+          "name": "夏小晨",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "anmingyuan_v3.1",
+          "name": "安明远",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "wenhuaiqing_v3.1",
+          "name": "温怀清",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "anxiaolan_v3.1",
+          "name": "安小岚",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "xieshurou_v3.1",
+          "name": "谢舒柔",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "baiqinglan_v3.1",
+          "name": "白清岚",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "xuyuyuan_v3.1",
+          "name": "许玉远",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "anruorou_v3.1",
+          "name": "安若柔",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "wenhuaizhi_v3.1",
+          "name": "闻怀之",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "xiaoxingzhi_v3.1",
+          "name": "萧行之",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "guyunshu_v3.1",
+          "name": "顾云舒",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "huozhuoshi_v3.1",
+          "name": "霍拙石",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "yeqinghe_v3.1",
+          "name": "叶清禾",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "yunhuanhuan_v3.1",
+          "name": "云欢欢",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "xuxiaoqiao_v3.1",
+          "name": "徐小俏",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "baianran_v3.1",
+          "name": "白安然",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "xuyanchu_v3.1",
+          "name": "许言初",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "yezhiqing_v3.1",
+          "name": "叶知晴",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "andi_v3.1",
+          "name": "安迪",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "anyuqing_v3.1",
+          "name": "安语晴",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": [
+            "zh"
+          ]
+        },
+        {
+          "id": "Emily_v3.1",
+          "name": "Emily",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Luna_v3.1",
+          "name": "Luna",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Eric_v3.1",
+          "name": "Eric",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Luca_v3.1",
+          "name": "Luca",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Abby_v3.1",
+          "name": "Abby",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Annie_v3.1",
+          "name": "Annie",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Ava_v3.1",
+          "name": "Ava",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Beth_v3.1",
+          "name": "Beth",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Betty_v3.1",
+          "name": "Betty",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Cally_v3.1",
+          "name": "Cally",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Cindy_v3.1",
+          "name": "Cindy",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Donna_v3.1",
+          "name": "Donna",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Andy_v3.1",
+          "name": "Andy",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "Brian_v3.1",
+          "name": "Brian",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "David_v3.1",
+          "name": "David",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanyuanfei_v3.1",
+          "name": "龙安元妃_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longjielidou_v3.1",
+          "name": "龙杰力豆_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanlingxi_v3.1",
+          "name": "龙安灵希_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longhuohuo_v3.1",
+          "name": "龙火火_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longyingtao_v3.1",
+          "name": "龙应桃_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanya_v3.1",
+          "name": "龙安雅_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longwan_v3.1",
+          "name": "龙婉_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longxing_v3.1",
+          "name": "龙星_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longhua_v3.1",
+          "name": "龙华_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longhan_v3.1",
+          "name": "龙寒_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanzhi_v3.1",
+          "name": "龙安智_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longzhe_v3.1",
+          "name": "龙哲_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanyang_v3.1",
+          "name": "龙安洋_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "libai_v3.1",
+          "name": "李白_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longling_v3.1",
+          "name": "龙铃_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longniuniu_v3.1",
+          "name": "龙牛牛_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longshanshan_v3.1",
+          "name": "龙闪闪_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longpaopao_v3.1",
+          "name": "龙泡泡_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "loongstella_v3.1",
+          "name": "loongstella_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longyuan_v3.1",
+          "name": "龙媛_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longmiao_v3.1",
+          "name": "龙妙_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longsanshu_v3.1",
+          "name": "龙三叔_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanli_v3.1",
+          "name": "龙安莉_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanwen_v3.1",
+          "name": "龙安温_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanlang_v3.1",
+          "name": "龙安朗_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longxiaoxia_v3.1",
+          "name": "龙小夏_v3.1",
+          "gender": "female",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        },
+        {
+          "id": "longanchong_v3.1",
+          "name": "龙安冲_v3.1",
+          "gender": "male",
+          "ssml": true,
+          "instruction": true,
+          "timestamp": true,
+          "languages": null
+        }
+      ]
+    }
+  ]
+}

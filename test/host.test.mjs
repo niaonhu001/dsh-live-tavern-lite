@@ -992,7 +992,7 @@ test('settings round-trip through the file and layer over the row', async () => 
     const initial = JSON.parse((await call(route)).text)
     assert.ok(initial.fields.length >= 10, 'every tunable is described')
     assert.equal(initial.values.placement, 'chat')
-    assert.equal(initial.values.director, true)
+    assert.equal(initial.values.directorMode, 'hybrid')
     // Every resettable field ships the built-in value behind its ↺ button.
     assert.equal(initial.defaults.placement, 'chat')
     assert.equal(initial.defaults.worldbookBudgetTokens, 8192)
@@ -1000,12 +1000,13 @@ test('settings round-trip through the file and layer over the row', async () => 
 
     const saved = await call(route, {
       method: 'POST',
-      body: JSON.stringify({ placement: 'sidebar', opacity: 0.8, director: false }),
+      body: JSON.stringify({ placement: 'sidebar', opacity: 0.8, contentTransparent: true, directorMode: 'off' }),
     })
     assert.equal(saved.statusCode, 200)
     const onDisk = JSON.parse(await readFile(join(home, 'live2d', 'settings.json'), 'utf8'))
     assert.equal(onDisk.placement, 'sidebar')
     assert.equal(onDisk.opacity, 0.8)
+    assert.equal(onDisk.contentTransparent, true)
 
     // A fresh activation layers the stored values over the Cordis row.
     const second = fakeContext()
@@ -1013,11 +1014,19 @@ test('settings round-trip through the file and layer over the row', async () => 
     const config = JSON.parse((await call(second.find('/dsh-live-tavern-lite/config'))).text)
     assert.deepEqual(config.placement, ['sidebar'])
     assert.equal(config.opacity, 0.8)
+    // The transparency switch reaches the browser through /config, which is how
+    // the running page learns about it without a reload.
+    assert.equal(config.contentTransparent, true)
+
+    // It is a switch, not a truthy string: nothing but a real boolean is stored.
+    const badTransparent = await call(route, { method: 'POST', body: JSON.stringify({ contentTransparent: 'on' }) })
+    assert.equal(badTransparent.statusCode, 400)
 
     // Unknown keys and out-of-range values are refused, never stored.
     const unknown = await call(route, { method: 'POST', body: JSON.stringify({ nope: 1 }) })
     assert.equal(unknown.statusCode, 400)
-    const badSwitch = await call(route, { method: 'POST', body: JSON.stringify({ director: 'sometimes' }) })
+    // The mode is a closed list: an unknown value is refused, never stored.
+    const badSwitch = await call(route, { method: 'POST', body: JSON.stringify({ directorMode: 'sometimes' }) })
     assert.equal(badSwitch.statusCode, 400)
     const badType = await call(route, { method: 'POST', body: JSON.stringify({ opacity: 'big' }) })
     assert.equal(badType.statusCode, 400)
@@ -1038,6 +1047,13 @@ test('every settings field carries a value the form can read', async () => {
   // A field with no value renders empty and then looks unsaved on reopen.
   const missing = payload.fields.filter(field => !(field.key in payload.values)).map(field => field.key)
   assert.deepEqual(missing, [], `fields without a value: ${missing.join(', ')}`)
+  // …and the reverse: every value is a declared field. The form posts the values
+  // object back, so a display-only entry here breaks every save with
+  // "unknown setting '<key>'" — which is exactly how the retired `director`
+  // switch surfaced.
+  const declared = new Set(internals.settingsFields.map(field => field.key))
+  const stray = Object.keys(payload.values).filter(key => !declared.has(key))
+  assert.deepEqual(stray, [], `values without a field: ${stray.join(', ')}`)
   harness.disposeAll()
 })
 
@@ -1261,7 +1277,7 @@ test('a runtime without the 3D stage offers no VRM at all', async () => {
   harness.disposeAll()
 })
 
-test('VRM-only settings are hidden while a Live2D model is mounted', async () => {
+test('VRM-only settings and tools disappear while a Live2D model is mounted', async () => {
   const vrmOnly = ['springGravity', 'springStrength']
 
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-kinds-'))
@@ -1287,6 +1303,19 @@ test('VRM-only settings are hidden while a Live2D model is mounted', async () =>
     assert.ok(!asLive2d.fields.some(field => field.key === key), `${key} must not show for a Live2D model`)
   }
 
+  // The clip tool writes VRMA for a humanoid skeleton: a Live2D stage must not
+  // offer it, and the control tool must not ask for bone recipes or body prompts.
+  assert.equal(harness.tools.some(entry => entry.name === 'live2d_motion'), false, 'no clip tool for Live2D')
+  const liveAct = harness.tools.find(entry => entry.name === 'live2d_act')
+  for (const member of ['recipe', 'body', 'translate']) {
+    assert.equal(liveAct.parameters.properties[member], undefined, `${member} is not offered for a Live2D model`)
+  }
+  assert.match(liveAct.parameters.properties.params.description, /ParamAngleZ/)
+  assert.doesNotMatch(liveAct.description, /整段动作生成器/)
+  const liveParams = harness.tools.find(entry => entry.name === 'live2d_params')
+  assert.equal(liveParams.parameters.properties.guide, undefined, 'the VRM guide is not offered for Live2D')
+  assert.doesNotMatch(liveParams.description, /骨骼通道/)
+
   // Switching the pack to a VRM brings them back.
   await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'three' }))
   const fresh = fakeContext()
@@ -1296,6 +1325,15 @@ test('VRM-only settings are hidden while a Live2D model is mounted', async () =>
   for (const key of vrmOnly) {
     assert.ok(asVrm.fields.some(field => field.key === key), `${key} must show for a VRM model`)
   }
+
+  assert.ok(fresh.tools.some(entry => entry.name === 'live2d_motion'), 'a 3D stage is offered the clip tool')
+  const vrmAct = fresh.tools.find(entry => entry.name === 'live2d_act')
+  for (const member of ['recipe', 'body', 'translate']) {
+    assert.ok(vrmAct.parameters.properties[member], `${member} is offered for a VRM model`)
+  }
+  assert.match(vrmAct.description, /整段动作生成器/)
+  const vrmParams = fresh.tools.find(entry => entry.name === 'live2d_params')
+  assert.ok(vrmParams.parameters.properties.guide, 'the VRM guide is offered for a 3D model')
 
   harness.disposeAll()
   fresh.disposeAll()
@@ -1426,6 +1464,33 @@ test('the default pose is saved in the pack and refused when unknown', async () 
 
   const refused = await call(route, { method: 'POST', body: JSON.stringify({ emotion: 'nope' }) })
   assert.equal(refused.statusCode, 400)
+})
+
+test('a pack declares its own on-stage scale for the browser fit', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-stage-'))
+  process.env.DSH_HOME = home
+  const pack = join(home, 'live2d', 'packs', 'whale')
+  await mkdir(pack, { recursive: true })
+  await writeFile(join(pack, 'whale.model3.json'), JSON.stringify({ FileReferences: { Moc: 'whale.moc3' } }))
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'whale', director: false }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  const configOf = async (ctx) => JSON.parse((await call(ctx.routes.find(entry => entry.path.endsWith('/config')))).text)
+
+  // A pack without the file keeps the fitted size.
+  assert.equal((await configOf(harness)).packScale, 1)
+
+  await writeFile(join(pack, 'stage.json'), JSON.stringify({ scale: 0.8 }))
+  const scaled = fakeContext()
+  apply(scaled.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  assert.equal((await configOf(scaled)).packScale, 0.8)
+
+  // A nonsense value is clamped instead of shrinking the character out of sight.
+  await writeFile(join(pack, 'stage.json'), JSON.stringify({ scale: 99 }))
+  const clamped = fakeContext()
+  apply(clamped.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  assert.equal((await configOf(clamped)).packScale, 2)
 })
 
 test('an empty note save cannot wipe a file it was not based on', async () => {

@@ -97,6 +97,7 @@ test('the judge is offered animation channels, so a gesture is possible at all',
     memory: { facts: [] },
     digest: [],
     channels: ['BoneHeadX', 'BoneHeadZ'],
+    stageKind: 'vrm',
   })
   // Without a channel list the reply schema cannot name a bone, and she would only
   // ever change expression.
@@ -108,4 +109,24 @@ test('the judge is offered animation channels, so a gesture is possible at all',
   // A model that offers none must not be told to invent one.
   const bare = buildDirectorPrompt({ library, memory: { facts: [] }, digest: [] })
   assert.doesNotMatch(bare.system, /可用的动作通道/)
+})
+
+test('a Live2D judge is offered parameters, never bone channels', () => {
+  const library = {
+    prototypes: [{ id: 'neutral', label: '平静', valence: 0, arousal: 0, dominance: 0, intensity: 0 }],
+    byId: new Map(),
+  }
+  const prompt = buildDirectorPrompt({
+    library,
+    memory: { facts: [] },
+    digest: [],
+    channels: ['ParamAngleY', 'ParamAngleZ'],
+  })
+  // The rig is parameters, not bones: degrees and Bone* examples would describe a
+  // skeleton this model does not have.
+  assert.match(prompt.system, /可用的参数 id/)
+  assert.match(prompt.system, /ParamAngleY/)
+  assert.match(prompt.system, /ParamAngleY=8@140/)
+  assert.doesNotMatch(prompt.system, /可用的动作通道/)
+  assert.doesNotMatch(prompt.system, /BoneHeadX=12@160/)
 })

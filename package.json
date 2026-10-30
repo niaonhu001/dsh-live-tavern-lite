@@ -1,6 +1,6 @@
 {
   "name": "dsh-live-tavern-lite",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "type": "module",
   "description": "Live2D character stage for the DeepSeek Harness Web UI: chat-column background, foreground overlay and sidebar seats, same-origin model serving, LLM emotion control with a cross-session director, SillyTavern-style character cards and world books, and a settings page.",
   "keywords": [
@@ -63,7 +63,7 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test test/host.test.mjs test/pack.test.mjs test/artifact.test.mjs test/schema.test.mjs test/json-value.test.mjs test/recall.test.mjs test/rig.test.mjs test/pack-layout.test.mjs test/tracks.test.mjs test/presets.test.mjs test/prompt-section.test.mjs test/memory-session.test.mjs test/memory.test.mjs test/direct.test.mjs test/speech.test.mjs",
+    "test": "node --test test/host.test.mjs test/pack.test.mjs test/artifact.test.mjs test/schema.test.mjs test/json-value.test.mjs test/recall.test.mjs test/rig.test.mjs test/pack-layout.test.mjs test/tracks.test.mjs test/presets.test.mjs test/prompt-section.test.mjs test/memory-session.test.mjs test/memory.test.mjs test/direct.test.mjs test/speech.test.mjs test/motion.test.mjs test/bubble.test.mjs test/persona.test.mjs test/tts.test.mjs",
     "prepublishOnly": "npm run build && npm test",
     "pack:check": "npm pack --dry-run",
     "inspect": "node scripts/inspect-channels.mjs",
