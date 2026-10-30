@@ -558,7 +558,7 @@ pnpm verify:recipes -- --pack ~/.dsh/live2d/packs/橘雪莉
 
 | 分组 | 键 |
 | --- | --- |
-| 舞台 | `placement`、`pack`、`playerName`、`textureLod`、`opacity`、`contentTransparent`、`widthCap`、`lookAtPointer`、物理与点击 |
+| 舞台 | `placement`、`pack`、`playerName`、`textureLod`、`opacity`、`contentAlpha`（内容层透明度 0–100）、`widthCap`、`lookAtPointer`、物理与点击 |
 | 气泡 | `bubbleWidth`、`bubbleFontSize`、`bubbleOpacity`（单独一块，带即时预览的示例台词） |
 | 跨会话模型 | `rateLimits`（频率限制总开关：关掉后下面几项全部不生效）、`directorMode`（`off` / `hybrid` 不带人设 / `persona` 带人设）、`directorProvider`、`directorModel`、`directorEffort`、`directorMaxTokens`、`directorMaxCallsPerHour`、`directorMaxFacts`、`stageEveryTurns`（哪些轮可以更新）、`stageUpdatesPerTurn`（每轮至少更新几次，是下限不是上限）、`interaction`（点击或拖动触发场外模型）、`memoryScope`（`session` 或 `all`）、`sessionMaxFacts`、`recallScope`（`session` 或 `character`） |
 | 动作生成 | `motionProvider`、`motionEndpoint`、`motionDuration`、`motionTimeout`（只对 VRM 舞台显示） |
@@ -582,15 +582,17 @@ pnpm verify:recipes -- --pack ~/.dsh/live2d/packs/橘雪莉
 
 选项卡关掉时座位自动回到侧栏列，换别的展示位置也照旧。同一时间只保留一个（一个 WebGL 画布只能画一个座位，重复打开是聚焦而不是再建一个）。
 
-### 内容层透明（`contentTransparent`）
+### 内容层透明度（`contentAlpha`）
 
 舞台在 `chat` / `sidebar` 位置是**画在内容后面**的（座位 `z-index:-1`），所以挡住角色的从来不是模型，而是官方那几块不透明面板：窗口框架自己的 `--dsw-alias-bg-base`、侧栏的 `--dsw-specific-sidebar-fill`、会话列里的列容器，以及输入区停靠座那条「从透明渐变到主题底色」的白纱。
 
-打开这个开关，插件给 `<html>` 打一个 `data-dsh-l2d-clear`，再由 CSS 把上面这几类的 `background` 清成透明——**只清容器层**，而需要读的东西保留自己的底：消息气泡、代码块、引用块、输入卡片都不动，所以字不会跟角色糊在一起。页面自身的底色也留着：那是角色被画在上面的地板，不是压在它上面的面板。
+`contentAlpha` 是一个 **0–100 的百分比**，不是开关：`100` 原样不动；`60` 保留六成底色（侧栏、会话列表、输入区都还看得清）；`0` 才是完全透出来。插件给 `<html>` 打 `data-dsh-l2d-clear` 并写 CSS 变量 `--dsh-l2d-clear-alpha`，CSS 用 `color-mix(in srgb, 原色 <alpha>, transparent)` 把上面几类的底色按比例压淡——**只压容器层**，需要读的东西保留自己的底：消息气泡、代码块、引用块、输入卡片都不动，所以字不会跟角色糊在一起。页面自身的底色也留着：那是角色被画在上面的地板，不是压在它上面的面板。
+
+`color-mix` 不支持的老内核会忽略整条声明，页面退回原样（不会变成全透明）。旧设置里的 `contentTransparent: true` 读作 `0`、`false` 读作 `100`，老安装不会突然变糊。
 
 框架元素靠 `[data-slot="root"]` 往下找（CSS Modules 的哈希类名（`pI_x6G_frame`）每次发版都会变），找到后打 `data-dsh-l2d-frame`，样式只认这个属性；布局观察器每次 DOM 变动都会补一次标记，所以重开设置面板、切换会话、旋转屏幕都不会把透明度弄丢。
 
-开关是文档级属性，切换后**立刻生效**（保存仍在 120ms 后写进设置文件）；关掉时把属性和标记一起摘掉，页面回到官方外观。和 `dsh-session-wallpaper` 同时装不冲突：那个插件清得更彻底（连页面底色也清），两者叠加不会互相破坏，只是不必同时开。
+改动**立刻生效**（保存仍在 120ms 后写进设置文件）；回到 100 时把属性、变量和标记一起摘掉，页面回到官方外观。
 
 ### 语音（TTS）
 

@@ -45,7 +45,7 @@ const FALLBACK_DEFAULTS = {
   playerName: '玩家',
   textureLod: 'full',
   opacity: 1,
-  contentTransparent: false,
+  contentAlpha: 100,
   lookAtPointer: false,
   hitBoxScale: 1,
   springStrength: 1,
@@ -386,15 +386,15 @@ body.dsh-l2d-grabbing,body.dsh-l2d-grabbing *{cursor:grabbing !important}
    gradient. Clearing those reveals the stage. What stays opaque is what has to
    be read: bubbles, code blocks and the composer card keep their own fills.
    One attribute on <html> gates all of it, so the switch is a single write. */
-html[data-dsh-l2d-clear] [data-dsh-l2d-frame]{background:transparent!important}
-html[data-dsh-l2d-clear] [data-dsh-l2d-frame]>[class]{background-color:transparent!important;background-image:none!important}
-html[data-dsh-l2d-clear] [data-slot="sidebar"]>[class],
-html[data-dsh-l2d-clear] [data-slot="main.conversation"]>[class]{background-color:transparent!important;background-image:none!important}
-html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerSeat"]{background:transparent!important}
-html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerStack"]{background:transparent!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-dsh-l2d-frame]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-dsh-l2d-frame]>[class]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="sidebar"]>[class]{background-color:color-mix(in srgb,var(--dsw-specific-sidebar-fill,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="main.conversation"]>[class]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerSeat"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerStack"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerHero"],
-html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="heroWorkspaceRow"]{background-color:transparent!important;background-image:none!important}
-html[data-dsh-l2d-clear] [data-slot="rightbar"] [class*="_tabHost_"]:not([class*="_float_"]){background:transparent!important}
+html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="heroWorkspaceRow"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
+html[data-dsh-l2d-clear] [data-slot="rightbar"] [class*="_tabHost_"]:not([class*="_float_"]){background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 /* 侧栏舞台 (placement = sidebar).
    The seat is cut to the sidebar column so the character stands inside the rail,
    but the rail is painted over by two fills between her and the eye: the frame's
@@ -3345,18 +3345,31 @@ function tagClearFrame() {
  *
  * @param clear - Whether the content layer should be transparent.
  */
-function applyContentClear(clear) {
+/**
+ * Fade the content layers by a share of their own colour.
+ *
+ * `100` leaves the shell untouched; `0` clears the panels completely. The blend is
+ * `color-mix`, so a half value keeps half of the theme colour — the sidebar, the
+ * transcript column and the composer stay readable instead of vanishing.
+ *
+ * @param percent - 0..100 of the panel colour that stays.
+ */
+function applyContentAlpha(percent) {
   if (typeof document === 'undefined') return
   const root = document.documentElement
-  if (clear === true) {
-    if (root.getAttribute(CLEAR_ATTR) === null) root.setAttribute(CLEAR_ATTR, '')
-    tagClearFrame()
+  const number = Number(percent)
+  const value = Math.min(100, Math.max(0, Number.isFinite(number) ? number : 100))
+  if (value >= 100) {
+    root.removeAttribute(CLEAR_ATTR)
+    root.style.removeProperty('--dsh-l2d-clear-alpha')
+    for (const marked of document.querySelectorAll(`[${CLEAR_FRAME_ATTR}]`)) {
+      marked.removeAttribute(CLEAR_FRAME_ATTR)
+    }
     return
   }
-  root.removeAttribute(CLEAR_ATTR)
-  for (const marked of document.querySelectorAll(`[${CLEAR_FRAME_ATTR}]`)) {
-    marked.removeAttribute(CLEAR_FRAME_ATTR)
-  }
+  root.setAttribute(CLEAR_ATTR, '')
+  root.style.setProperty('--dsh-l2d-clear-alpha', `${value}%`)
+  tagClearFrame()
 }
 
 /**
@@ -3380,7 +3393,7 @@ function watchLayout() {
     if (S.disposed) return
     // The frame is re-rendered with the shell, so keep the marker on whatever
     // element is current before anything else looks at the layout.
-    if (S.config?.contentTransparent === true) tagClearFrame()
+    if (Number(S.config?.contentAlpha) < 100) tagClearFrame()
     if (S.app === null && S.vrm === null) {
       // The shell can mount after this plugin activates; retry the stage then.
       if (!S.starting && S.config !== null && anchorFor(S.config.placement[0] ?? 'chat') !== null) {
@@ -3445,7 +3458,7 @@ async function refreshDisplayConfig() {
   // The transparency switch is a document-level style, so it adopts instantly —
   // before the early returns below (a 3D stage or a still-booting one skips the
   // placement refresh but must still honour the switch).
-  applyContentClear(next.contentTransparent === true)
+  applyContentAlpha(next.contentAlpha)
   // Bubble size, opacity and font size need no rebuild: they are three CSS
   // variables the running page can adopt on the spot.
   applyBubbleStyle()
@@ -3674,9 +3687,9 @@ async function mountSettingsForm(container) {
     const onChange = (value) => {
       draft[field.key] = value
       if (field.section === 'bubble') syncBubblePreview?.()
-      // Transparency is a document attribute, not a saved number the stage has
-      // to reload: flip it now so the switch shows what it does before saving.
-      if (field.key === 'contentTransparent') applyContentClear(value === true)
+      // Transparency is a document variable, not a saved number the stage has to
+      // reload: apply it now so the slider shows what it does before saving.
+      if (field.key === 'contentAlpha') applyContentAlpha(value)
       syncConditionals()
       commit(field.kind === 'text' ? 500 : 120)
     }
@@ -5657,7 +5670,7 @@ async function boot() {
   }
   if (S.disposed) return
   applyBubbleStyle(S.config)
-  applyContentClear(S.config.contentTransparent === true)
+  applyContentAlpha(S.config.contentAlpha)
   preloadVrm(S.config)
   // Booting the stage must not hold up the plugin table: the shell may still
   // be mounting, and the layout watcher starts it as soon as it can.
@@ -5772,7 +5785,7 @@ function dispose() {
   S.speech = null
   S.pendingSpeech = null
   clearBubbleStyle()
-  applyContentClear(false)
+  applyContentAlpha(100)
   S.dragBox = null
   S.pointerGestures = false
   removeRig()

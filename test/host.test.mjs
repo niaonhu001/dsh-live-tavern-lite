@@ -1035,13 +1035,13 @@ test('settings round-trip through the file and layer over the row', async () => 
 
     const saved = await call(route, {
       method: 'POST',
-      body: JSON.stringify({ placement: 'sidebar', opacity: 0.8, contentTransparent: true, directorMode: 'off' }),
+      body: JSON.stringify({ placement: 'sidebar', opacity: 0.8, contentAlpha: 40, directorMode: 'off' }),
     })
     assert.equal(saved.statusCode, 200)
     const onDisk = JSON.parse(await readFile(join(home, 'live2d', 'settings.json'), 'utf8'))
     assert.equal(onDisk.placement, 'sidebar')
     assert.equal(onDisk.opacity, 0.8)
-    assert.equal(onDisk.contentTransparent, true)
+    assert.equal(onDisk.contentAlpha, 40)
 
     // A fresh activation layers the stored values over the Cordis row.
     const second = fakeContext()
@@ -1049,12 +1049,12 @@ test('settings round-trip through the file and layer over the row', async () => 
     const config = JSON.parse((await call(second.find('/dsh-live-tavern-lite/config'))).text)
     assert.deepEqual(config.placement, ['sidebar'])
     assert.equal(config.opacity, 0.8)
-    // The transparency switch reaches the browser through /config, which is how
+    // The transparency level reaches the browser through /config, which is how
     // the running page learns about it without a reload.
-    assert.equal(config.contentTransparent, true)
+    assert.equal(config.contentAlpha, 40)
 
-    // It is a switch, not a truthy string: nothing but a real boolean is stored.
-    const badTransparent = await call(route, { method: 'POST', body: JSON.stringify({ contentTransparent: 'on' }) })
+    // It is a number, not a truthy string.
+    const badTransparent = await call(route, { method: 'POST', body: JSON.stringify({ contentAlpha: 'on' }) })
     assert.equal(badTransparent.statusCode, 400)
 
     // Unknown keys and out-of-range values are refused, never stored.
