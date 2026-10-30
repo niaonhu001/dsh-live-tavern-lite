@@ -388,13 +388,11 @@ body.dsh-l2d-grabbing,body.dsh-l2d-grabbing *{cursor:grabbing !important}
    One attribute on <html> gates all of it, so the switch is a single write. */
 html[data-dsh-l2d-clear] [data-dsh-l2d-frame]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-clear] [data-dsh-l2d-frame]>[class]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
-html[data-dsh-l2d-clear] [data-slot="sidebar"]>[class]{background-color:color-mix(in srgb,var(--dsw-specific-sidebar-fill,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-clear] [data-slot="main.conversation"]>[class]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerSeat"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerStack"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerHero"],
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="heroWorkspaceRow"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
-html[data-dsh-l2d-clear] [data-slot="rightbar"] [class*="_tabHost_"]:not([class*="_float_"]){background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 /* 侧栏舞台 (placement = sidebar).
    The seat is cut to the sidebar column so the character stands inside the rail,
    but the rail is painted over by two fills between her and the eye: the frame's
