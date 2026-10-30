@@ -339,6 +339,41 @@ test('both tools register, and recall reads the committed transcript', async () 
   harness.disposeAll()
 })
 
+test('a pack-owned transcript lands beside the character', async () => {
+  // This test needs its own DSH_HOME; put the previous one back or the settings
+  // file it wrote (pack: whale) leaks into every later test.
+  const savedHome = process.env.DSH_HOME
+  try {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-transcript-'))
+    process.env.DSH_HOME = home
+    const packsRoot = join(home, 'live2d', 'packs')
+    const pack = join(packsRoot, 'whale')
+    await mkdir(join(pack, 'model'), { recursive: true })
+    await writeFile(join(pack, 'model', 'whale.model3.json'), JSON.stringify({ FileReferences: { Moc: 'whale.moc3' } }))
+    await writeFile(join(pack, 'card.json'), JSON.stringify({ name: '鲸' }))
+    await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'whale' }))
+
+    const harness = fakeContext()
+    apply(harness.ctx, { packsRoot, modelsRoot: join(home, 'live2d', 'models') })
+    harness.emit('session/event', { id: 's9', header: { id: 's9' } }, {
+      type: 'user/message',
+      data: { message: { content: [{ type: 'text', text: '今天晚饭吃什么' }] } },
+    })
+    // The transcript write is debounced by 1.5 s.
+    await new Promise(resolve => setTimeout(resolve, 1900))
+    // The file belongs to the pack, while memoryFile points at the shared director
+    // directory: a containment check against the wrong root dropped every write.
+    const file = join(pack, 'transcripts', 's9.json')
+    assert.ok(existsSync(file), `transcript written beside the pack: ${file}`)
+    const stored = JSON.parse(await readFile(file, 'utf8'))
+    assert.equal(stored.entries[0].text, '今天晚饭吃什么')
+    harness.disposeAll()
+  } finally {
+    if (savedHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = savedHome
+  }
+})
+
 test('status channel stores the last browser self-report', async () => {
   const harness = fakeContext()
   apply(harness.ctx, {})
