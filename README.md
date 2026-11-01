@@ -108,6 +108,24 @@ dsh plugin --profile web install link:/path/to/dsh-live-tavern-lite
 
 装完重启一次 `dsh web`（宿主模块每个进程只导入一次）。之后浏览器侧的改动刷新页面即可。
 
+## 部署：音乐、翻唱、运动
+
+三个功能互相独立，可以只装一个。完整流程（依赖清单、安装命令、验证命令、失败对照）都在 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**，这里只给总表。
+
+| 功能 | 工具 | 依赖 | 一句话部署 |
+| --- | --- | --- | --- |
+| 运动 | `live2d_motion` | `sample` 零依赖；`ardy` 需本地 ARDY 引擎（约 20 GB 模型、显存约 1.2 GB、端口 2337） | 先 `node scripts/motion.mjs sample:wave out/wave.vrma` 验证舞台；要生成动作再装引擎 |
+| 翻唱 | `live2d_sing {mode:"cover"}` | MSST（分离）+ DDSP-SVC（换声）+ 音色 `.pt` + `dsh-cover-pipeline/runtime` + ffmpeg | 两个 Python env 分开装，`pedalboard≥0.9.26`、`numpy<2`，再用 25 秒音频冒烟 |
+| 唱歌 | `live2d_sing {mode:"sing"}` | 翻唱全部依赖 + YuE2 整合包（Gradio `:9000` + ComfyUI `:8188`） | 先起 YuE2 并 `curl :9000`，设置 `songYuE2Url`；换声前按需释放显存 |
+
+三点必须记住：
+
+- **串行**：同一时间只做一首歌、只跑一种大模型。YuE2 出歌之后才启动换声，8 GB 卡才放得下。
+- **英文**：`ardy` 通路的 prompt 只能是英文，插件不替你翻译。
+- **来源**：YuE2 整合包来自 B 站 UP 主「余子越Talk」（启动器 `YZY启动器-YuE2-261011.exe`，说明文档 <https://yuziyuetalk.feishu.cn/docx/Ml9RdeXsyoANFnxo77NcxyU0nbh>）；整合包与模型版权归原作者，本插件只调用其本地接口。
+
+给 agent 的部署顺序与判定条件在同一份文档的「Agent 部署清单」一节：先插件 → 再 `sample` 验舞台 → 翻唱冒烟 → YuE2 短歌 → 长歌，每一步都有成功判据和失败对照。
+
 ## 角色包
 
 ```
@@ -474,6 +492,8 @@ prompt → ARDY（text-to-vrma 引擎，关节序列） → ardyspec.mjs（度 �
 | `http` | `POST {prompt, duration, seed}` 到一个服务；响应可以是 VRMA 字节、`{url}` 或 `{vrma: base64}` | 一个已经会说这套接口的进程 |
 | `sample` | 内置示例动作（`wave` / `bow` / `nod` / `crouch` / `turn` / `dance`），不联网、不加载权重 | 无 |
 
+插件只做**调用与转换**（POST `/generate` → 度数转四元数 → 人形骨映射 → 写 VRMA → 播放）；真正的动作模型必须由外部进程提供。**不需要整套 [text-to-vrma](https://github.com/Kirakun0328/text-to-vrma) 应用**，只要它的 `tools/ardy-engine/`（`install.ps1` 建环境下权重、`server.py` 起 2337）。Electron 界面、Web 前端、日语翻译、Jev 分析对这里都没用。部署命令与判定见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#12-ardy本地引擎)。
+
 `ardy` 的两点须知：
 
 - **英文是硬要求**。选了这个 provider 时，`live2d_motion` 的工具说明会要求模型直接用英文写 prompt；真收到中日韩字符，provider 会当场拒绝并说明原因，模型可以在同一轮里改写成英文重试。插件不做自动翻译。
@@ -581,7 +601,8 @@ pnpm verify:recipes -- --pack ~/.dsh/live2d/packs/橘雪莉
 | 气泡 | `bubbleWidth`、`bubbleFontSize`、`bubbleOpacity`（单独一块，带即时预览的示例台词） |
 | 跨会话模型 | `rateLimits`（频率限制总开关：关掉后下面几项全部不生效）、`directorMode`（`off` / `hybrid` 不带人设 / `persona` 带人设）、`directorProvider`、`directorModel`、`directorEffort`、`directorMaxTokens`、`directorMaxCallsPerHour`、`directorMaxFacts`、`stageEveryTurns`（哪些轮可以更新）、`stageUpdatesPerTurn`（每轮至少更新几次，是下限不是上限）、`interaction`（点击或拖动触发场外模型）、`memoryScope`（`session` 或 `all`）、`sessionMaxFacts`、`recallScope`（`session` 或 `character`） |
 | 动作生成 | `motionProvider`、`motionEndpoint`、`motionDuration`、`motionTimeout`（只对 VRM 舞台显示） |
-| 语音 | `ttsProvider`、`ttsApiKey`、`ttsModel`、`ttsVoice`、`ttsRate`、`ttsPitch`、`ttsInstruction`（`ttsBaseUrl` 隐藏） |
+| 语音 | `ttsProvider`、`ttsApiKey`、`ttsModel`、`ttsLanguage`、`ttsSyncMode`、`ttsVoice`、`ttsModelControls`、`ttsRate`、`ttsPitch`、`ttsInstruction`（`ttsBaseUrl` 隐藏） |
+| 唱歌 | `songEnabled`、`songYuE2Url`、`songVoiceModel`、`songWorkRoot`、`songMsstDir`、`songMsstEnv`、`songDdspDir`、`songDdspEnv`、`songFFmpeg`、`songPipelineDir` |
 | 世界书 | `worldbookBudgetTokens`、`worldbookScanDepth`、`worldbookCooldownRounds`，下面紧接着世界书诊断 |
 | 映射表 | `rigMaxTokens` |
 
