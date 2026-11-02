@@ -11,6 +11,7 @@ import {
   normalizeWorldBook,
   planWorldBook,
   renderCardSection,
+  renderPlayerSection,
   renderWorldBookSection,
 } from '../lib/pack.mjs'
 
@@ -147,6 +148,23 @@ test('SillyTavern macros never survive into a prompt section', () => {
 
   // An unknown macro is left alone; interpolate:false keeps it from failing.
   assert.equal(applyMacros('{{unknown}}', { charName: 'A', userName: 'B' }), '{{unknown}}')
+})
+
+test('a configured player name is stated as the name to address the player by', () => {
+  // Substituting the macro only reaches text that already mentions the player, so
+  // a card that never writes {{user}} has to learn the name from the section itself.
+  const card = normalizeCard({ data: { name: '艾莲', personality: '懒散。' } }, 'ailian')
+  const named = renderCardSection(card, { userName: '先生' })
+  assert.match(named, /## 玩家\n正在和你说话的是玩家，称呼是「先生」/)
+  assert.match(named, /## 角色：艾莲/)
+  assert.equal(named.indexOf('## 玩家') < named.indexOf('## 角色：'), true)
+  assert.equal(renderPlayerSection('先生'), renderPlayerSection(' 先生 '))
+
+  // Placeholders carry no identity: restating them would only spend prompt tokens.
+  for (const placeholder of [undefined, '', '玩家', '你', '用户', 'User']) {
+    assert.equal(renderPlayerSection(placeholder), '')
+    assert.doesNotMatch(renderCardSection(card, { userName: placeholder }), /## 玩家/)
+  }
 })
 
 test('the scan window only reads the recent tail of the digest', () => {
