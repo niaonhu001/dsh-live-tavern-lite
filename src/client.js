@@ -404,18 +404,19 @@ html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerStack"
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerHero"],
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="heroWorkspaceRow"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 /* 低不透明度毛玻璃 (stage opacity below 30%).
-   Below three tenths she is a suggestion, not a subject: washing the whole shell
-   out costs the UI more than it shows of her. The wash stands down and the input
-   card, the message bubbles and the assistant blocks turn into frosted glass.
-   The frame and the centre column still have to let her through — they sit between
-   her layer and those panels, and an opaque fill there leaves the glass with a flat
-   white backdrop, which is a blur of nothing and a transparency nobody can see. */
+   Below three tenths the wash hands the job to frosted glass: the input card, the
+   message bubbles and the assistant blocks become panes whose colour share and
+   blur both ride the transparency setting.
+   The frame and the centre column sit between her layer and those panes, so they
+   have to let her through — but they keep the same share of the base colour the
+   setting asks for (the --dsh-l2d-clear-alpha variable), never a hole: the shell
+   still fades with the slider instead of being ignored in this mode. */
 html[data-dsh-l2d-frost] [data-dsh-l2d-frame],
 html[data-dsh-l2d-frost] [class*="centerCol"],
-html[data-dsh-l2d-frost] [data-dsh-l2d-anchor]{background-color:transparent!important;background-image:none!important}
-html[data-dsh-l2d-frost] [data-slot="main.conversation"]>[class]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-frost] [data-dsh-l2d-anchor],
+html[data-dsh-l2d-frost] [data-slot="main.conversation"]>[class],
 html[data-dsh-l2d-frost] [data-slot="main.conversation"] [class*="composerSeat"],
-html[data-dsh-l2d-frost] [data-slot="main.conversation"] [class*="composerStack"]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-frost] [data-slot="main.conversation"] [class*="composerStack"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,60%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-frost] [data-composer-card]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-frost-alpha,72%),transparent)!important;background-image:none!important;box-shadow:none!important;backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.2);-webkit-backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.2)}
 html[data-dsh-l2d-frost] [data-slot="main.conversation"] [class*="bubble"]{background-color:color-mix(in srgb,var(--dsw-specific-bubble,#f1f1f1) var(--dsh-l2d-frost-alpha,72%),transparent)!important;background-image:none!important;backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.15);-webkit-backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.15)}
 /* The assistant body is the assistant-step node — assistant is only the
@@ -948,7 +949,9 @@ function fitModel() {
     width / 2 + S.layout.model.x + shift.x - centreShift,
     height + S.layout.model.y + shift.y + bottomGap,
   )
-  model.alpha = S.config.opacity
+  // The stage never dims her: the opacity setting belongs to the shell (how much
+  // of its own colour it keeps), not to the character standing behind it.
+  model.alpha = 1
   if (S.bubble !== null && S.bubble.dataset.show === '1') positionBubble()
 }
 
@@ -3426,18 +3429,20 @@ function applyContentAlpha(percent) {
   const root = document.documentElement
   const number = Number(percent)
   const value = Math.min(100, Math.max(0, Number.isFinite(number) ? number : 100))
+  // The frosted delivery reads the same share: its panels keep this much of the
+  // base colour over her, so the frame still follows the setting instead of
+  // turning into a hole.
+  root.style.setProperty('--dsh-l2d-clear-alpha', `${value}%`)
   // Frosted delivery owns the surfaces itself: the clear pass must not fight the
   // frost rules for the same elements.
   if (value >= 100 || root.hasAttribute(FROST_ATTR)) {
     root.removeAttribute(CLEAR_ATTR)
-    root.style.removeProperty('--dsh-l2d-clear-alpha')
     for (const marked of document.querySelectorAll(`[${CLEAR_FRAME_ATTR}]`)) {
       marked.removeAttribute(CLEAR_FRAME_ATTR)
     }
     return
   }
   root.setAttribute(CLEAR_ATTR, '')
-  root.style.setProperty('--dsh-l2d-clear-alpha', `${value}%`)
   tagClearFrame()
 }
 

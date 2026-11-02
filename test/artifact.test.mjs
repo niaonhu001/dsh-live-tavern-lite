@@ -108,15 +108,19 @@ test('the frosted low-opacity delivery covers input, bubbles and the assistant b
   assert.doesNotMatch(source, /backdrop-filter:blur\(18px\)/, 'no pinned blur radius')
   // The frame and the centre column sit between her layer and those panels: an
   // opaque fill there leaves the glass blurring a flat backdrop, which is why the
-  // concentration used to look inert.
-  assert.ok(
-    source.includes('html[data-dsh-l2d-frost] [data-dsh-l2d-frame]'),
-    'frost clears the frame fill',
-  )
+  // concentration used to look inert. They must fade by the shared wash variable
+  // rather than turning into a hole, or the mode would ignore the setting.
+  const frostLayers = source.slice(source.indexOf('html[data-dsh-l2d-frost] [data-dsh-l2d-frame]'))
+  const frameRule = frostLayers.slice(0, frostLayers.indexOf('}'))
+  assert.ok(frameRule.includes('--dsh-l2d-clear-alpha'), 'frost layers follow the wash setting')
+  assert.ok(!frameRule.includes('background-color:transparent'), 'frost layers are not a hole')
   assert.ok(
     source.includes('html[data-dsh-l2d-frost] [class*="centerCol"]'),
     'frost clears the centre column fill',
   )
+  // The opacity setting belongs to the shell: she never fades with it.
+  assert.match(source, /model\.alpha = 1\b/)
+  assert.doesNotMatch(source, /model\.alpha = S2?\.config\.opacity/)
 })
 
 test('the wrapper is self-contained and exposes only apply', async () => {
