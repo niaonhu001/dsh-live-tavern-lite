@@ -597,8 +597,8 @@ pnpm verify:recipes -- --pack ~/.dsh/live2d/packs/橘雪莉
 
 | 分组 | 键 |
 | --- | --- |
-| 舞台 | `placement`、`pack`、`playerName`、`textureLod`、`opacity`、`contentAlpha`（内容层透明度 0–100）、`widthCap`、`lookAtPointer`、物理与点击 |
-| 气泡 | `bubbleWidth`、`bubbleFontSize`、`bubbleOpacity`（单独一块，带即时预览的示例台词） |
+| 舞台 | `placement`、`pack`、`playerName`、`textureLod`、`opacity`（不透明度，设置页按 % 填：0–100，面板让多少跟着它走）、`frostOpacity`（毛玻璃透明度 0–100）、`widthCap`、`lookAtPointer`、物理与点击 |
+| 气泡 | `bubbleWidth`、`bubbleFontSize`、`bubbleOpacity`（底色不透明度，设置页按 % 填：20–100；单独一块，带即时预览的示例台词） |
 | 跨会话模型 | `rateLimits`（频率限制总开关：关掉后下面几项全部不生效）、`directorMode`（`off` / `hybrid` 不带人设 / `persona` 带人设）、`directorProvider`、`directorModel`、`directorEffort`、`directorMaxTokens`、`directorMaxCallsPerHour`、`directorMaxFacts`、`stageEveryTurns`（哪些轮可以更新）、`stageUpdatesPerTurn`（每轮至少更新几次，是下限不是上限）、`interaction`（点击或拖动触发场外模型）、`memoryScope`（`session` 或 `all`）、`sessionMaxFacts`、`recallScope`（`session` 或 `character`） |
 | 动作生成 | `motionProvider`、`motionEndpoint`、`motionDuration`、`motionTimeout`（只对 VRM 舞台显示） |
 | 语音 | `ttsProvider`、`ttsApiKey`、`ttsModel`、`ttsLanguage`、`ttsSyncMode`、`ttsVoice`、`ttsModelControls`、`ttsRate`、`ttsPitch`、`ttsInstruction`（`ttsBaseUrl` 隐藏） |
@@ -622,17 +622,27 @@ pnpm verify:recipes -- --pack ~/.dsh/live2d/packs/橘雪莉
 
 选项卡关掉时座位自动回到侧栏列，换别的展示位置也照旧。同一时间只保留一个（一个 WebGL 画布只能画一个座位，重复打开是聚焦而不是再建一个）。
 
-### 内容层透明度（`contentAlpha`）
+### 内容层透明度：跟着舞台不透明度走
 
 舞台在 `chat` / `sidebar` 位置是**画在内容后面**的（座位 `z-index:-1`），所以挡住角色的从来不是模型，而是官方那几块不透明面板：窗口框架自己的 `--dsw-alias-bg-base`、会话列里的列容器，以及输入区停靠座那条「从透明渐变到主题底色」的白纱。
 
-`contentAlpha` 调的是**这些底色的不透明度**，是一个 **0–100 的百分比**：`100` 原样不动；`60` 保留六成底色（会话区看得清、角色从下面透出来）；`0` 才是完全透出。插件给 `<html>` 打 `data-dsh-l2d-clear` 并写 CSS 变量 `--dsh-l2d-clear-alpha`，CSS 用 `color-mix(in srgb, 原色 <alpha>, transparent)` 只压**框架底板与会话区的容器底色**——侧栏、右侧栏、消息气泡、代码块、引用块、输入卡片都保留自己的底，所以文字和导航不会跟着变淡。
+这一幕的底色让多少，**没有单独的开关**：`contentAlpha` 由舞台不透明度换算而来（`round(opacity × 100)`），`100` 时面板原样不动、`60` 时留六成底色、`30` 是这一档最淡的一头。插件给 `<html>` 打 `data-dsh-l2d-clear` 并写 CSS 变量 `--dsh-l2d-clear-alpha`，CSS 用 `color-mix(in srgb, 原色 <alpha>, transparent)` 只压**框架底板与会话区的容器底色**——侧栏、右侧栏、消息气泡、代码块、引用块、输入卡片都保留自己的底，所以文字和导航不会跟着变淡。
 
-`color-mix` 不支持的老内核会忽略整条声明，页面退回原样（不会变成全透明）。旧设置里的 `contentTransparent: true` 读作 `0`、`false` 读作 `100`，老安装不会突然变糊。
+`color-mix` 不支持的老内核会忽略整条声明，页面退回原样（不会变成全透明）。
 
 框架元素靠 `[data-slot="root"]` 往下找（CSS Modules 的哈希类名（`pI_x6G_frame`）每次发版都会变），找到后打 `data-dsh-l2d-frame`，样式只认这个属性；布局观察器每次 DOM 变动都会补一次标记，所以重开设置面板、切换会话、旋转屏幕都不会把透明度弄丢。
 
-改动**立刻生效**（保存仍在 120ms 后写进设置文件）；回到 100 时把属性、变量和标记一起摘掉，页面回到官方外观。
+保存后**立刻生效**；回到 100 时把属性、变量和标记一起摘掉，页面回到官方外观。
+
+### 低不透明度：毛玻璃
+
+舞台不透明度（`opacity`）掉到 **30% 以下**时，上面那套「整页调底色」让位——为一层几乎看不见的角色把整个外壳洗淡不划算。插件改给 `<html>` 打 `data-dsh-l2d-frost`，只让会话列自己透出角色，然后把三块阅读面换成毛玻璃：输入卡片（`[data-composer-card]`）、消息气泡（会话列里的 `[class*="bubble"]`，CSS Modules 的哈希前缀不影响匹配）、以及回答正文（`[data-chat-flow-kind="assistant-step"]`——正文的 flow kind 是 `assistant-step`，`assistant` 只是被折叠的最终消息，自身不占 flow 行，挂在那上面是空规则）。毛玻璃 = `color-mix` 留一档底色 + `backdrop-filter: blur(14–18px) saturate(1.15)`，字始终压得住，她在玻璃后面软软地透出来。
+
+玻璃有多透由 `frostOpacity` 决定，是设置页里的「毛玻璃透明度」：**0–100，默认 28**，数字越大她越清楚，0 是实心卡片。同一个数字驱动两件事：`color-mix` 里那份底色（写进 `--dsh-l2d-frost-alpha`）与模糊半径（写进 `--dsh-l2d-frost-blur`，100 时降到 0）——一块还在 18px 模糊的玻璃就算底色抽干也像牛奶，所以模糊也得跟着让开。100 时这层玻璃只剩「透过」，输入卡片的阴影也一并去掉，不会留一圈卡片的轮廓。改设置页里的数字当场生效，不用刷新，也不用重建。两端各夹一次范围，超出的值落成 0 或 100。
+
+她站在 `z-index:-1` 那一层，框架底板与中间那一列（`[class*="centerCol"]`）都在她与阅读面板之间。这两层不一起让开，玻璃背后就是一片均匀的白——`backdrop-filter` 模糊的是空白，透明度调到哪都一样。所以 frost 模式会清掉框架与中间列的填充，只留侧栏与右侧栏原样；这是「调了没反应」的那个坑。（早期版本只清了会话列，于是毛玻璃看着像贴纸。）
+
+回到 30% 及以上时 frost 标记摘掉、跟随舞台不透明度的那套重新接管；两套规则互斥，靠同一个判断切换，不会同时争同一个元素。阈值在宿主（`FROST_STAGE_OPACITY`）与浏览器（`FROST_BELOW`）各写一份并互相注明，`frostOpacity` 的 `showWhen` 用同一个数决定它在设置页里露不露面。
 
 ### 语音（TTS）
 
@@ -671,7 +681,7 @@ pnpm verify:recipes -- --pack ~/.dsh/live2d/packs/橘雪莉
 
 每个浏览器各自的布局（模型与气泡偏移、身高占比）**不在**设置文件里，而是存在 `localStorage`：同一个角色在两个窗口里可以摆得不一样。双击舞台归位。
 
-气泡的**宽度、字号与底色不透明度**属于设置文件，在设置页里单独一块（标题「气泡」，带一条即时预览的示例台词）：`bubbleWidth` 180–720px、`bubbleFontSize` 11–26px、`bubbleOpacity` 0.2–1。同一台机器所有窗口一致，保存后不用刷新——它们只是三个 CSS 变量（`--dsh-l2d-bubble-width/font/alpha`），保存成功时直接改写。不透明度只作用于底色和那个小尖角，台词文字始终不透明，所以调淡了也不会糊。越界值在宿主与浏览器两侧各夹一次。
+气泡的**宽度、字号与底色不透明度**属于设置文件，在设置页里单独一块（标题「气泡」，带一条即时预览的示例台词）：`bubbleWidth` 180–720px、`bubbleFontSize` 11–26px、`bubbleOpacity` 设置页按 **%** 填（20–100），文件里仍是 0.2–1 的比例。同一台机器所有窗口一致，保存后不用刷新——它们只是三个 CSS 变量（`--dsh-l2d-bubble-width/font/alpha`），保存成功时直接改写。不透明度只作用于底色和那个小尖角，台词文字始终不透明，所以调淡了也不会糊。越界值在宿主与浏览器两侧各夹一次。
 
 ## 一个回合怎么走
 

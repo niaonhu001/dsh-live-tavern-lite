@@ -45,7 +45,7 @@ const FALLBACK_DEFAULTS = {
   playerName: '玩家',
   textureLod: 'full',
   opacity: 1,
-  contentAlpha: 100,
+  frostOpacity: 28,
   lookAtPointer: false,
   hitBoxScale: 1,
   springStrength: 1,
@@ -403,6 +403,24 @@ html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerSeat"]
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerStack"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="composerHero"],
 html[data-dsh-l2d-clear] [data-slot="main.conversation"] [class*="heroWorkspaceRow"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-clear-alpha,0%),transparent)!important;background-image:none!important}
+/* 低不透明度毛玻璃 (stage opacity below 30%).
+   Below three tenths she is a suggestion, not a subject: washing the whole shell
+   out costs the UI more than it shows of her. The wash stands down and the input
+   card, the message bubbles and the assistant blocks turn into frosted glass.
+   The frame and the centre column still have to let her through — they sit between
+   her layer and those panels, and an opaque fill there leaves the glass with a flat
+   white backdrop, which is a blur of nothing and a transparency nobody can see. */
+html[data-dsh-l2d-frost] [data-dsh-l2d-frame],
+html[data-dsh-l2d-frost] [class*="centerCol"],
+html[data-dsh-l2d-frost] [data-dsh-l2d-anchor]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-frost] [data-slot="main.conversation"]>[class]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-frost] [data-slot="main.conversation"] [class*="composerSeat"],
+html[data-dsh-l2d-frost] [data-slot="main.conversation"] [class*="composerStack"]{background-color:transparent!important;background-image:none!important}
+html[data-dsh-l2d-frost] [data-composer-card]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-frost-alpha,72%),transparent)!important;background-image:none!important;box-shadow:none!important;backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.2);-webkit-backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.2)}
+html[data-dsh-l2d-frost] [data-slot="main.conversation"] [class*="bubble"]{background-color:color-mix(in srgb,var(--dsw-specific-bubble,#f1f1f1) var(--dsh-l2d-frost-alpha,72%),transparent)!important;background-image:none!important;backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.15);-webkit-backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.15)}
+/* The assistant body is the assistant-step node — assistant is only the
+   finished message the step folds, and never carries its own flow row. */
+html[data-dsh-l2d-frost] [data-chat-flow-kind="assistant-step"]{background-color:color-mix(in srgb,var(--dsw-alias-bg-base,#fff) var(--dsh-l2d-frost-alpha,72%),transparent);backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.18);-webkit-backdrop-filter:blur(var(--dsh-l2d-frost-blur,13px)) saturate(1.18);border-radius:16px;padding:8px 14px;margin-inline:-14px}
 /* 侧栏舞台 (placement = sidebar).
    The seat is cut to the sidebar column so the character stands inside the rail,
    but the rail is painted over by two fills between her and the eye: the frame's
@@ -3312,6 +3330,12 @@ function renderPanel() {
 const CLEAR_ATTR = 'data-dsh-l2d-clear'
 /** Attribute on the shell's root frame; the clear rules hang off it. */
 const CLEAR_FRAME_ATTR = 'data-dsh-l2d-frame'
+/** Attribute on `<html>` that swaps the clear rules for the frosted surfaces. */
+const FROST_ATTR = 'data-dsh-l2d-frost'
+/** Stage opacity below which the whole-page wash gives way to frosted glass. */
+const FROST_BELOW = 0.3
+/** Blur radius of a fully opaque frosted pane; it fades out as transparency rises. */
+const FROST_BLUR_MAX = 18
 
 /**
  * Tag the shell's root frame so the clear rules can reach the columns it owns.
@@ -3345,14 +3369,49 @@ function tagClearFrame() {
 }
 
 /**
- * Apply the 内容层透明 switch.
+ * Switch the low-opacity delivery: whole-page wash or frosted glass.
  *
- * Idempotent: the layout watcher calls `tagClearFrame` on every DOM burst, so a
- * shell remount re-marks the new frame without touching the attribute while the
- * same frame is still there.
+ * Below 30% she is a suggestion rather than a subject, so recolouring every panel
+ * costs more than it shows. The clear rules stand down; only the conversation
+ * column lets her through, behind a frosted input card and frosted message blocks
+ * (the CSS in `FROST_ATTR`). The clear pass is re-run here because both are gated
+ * on the same decision.
  *
- * @param clear - Whether the content layer should be transparent.
+ * @param opacity - Stage opacity, 0..1.
  */
+function applyFrostMode(opacity) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  const number = Number(opacity)
+  const value = Number.isFinite(number) ? Math.min(1, Math.max(0, number)) : 1
+  if (value < FROST_BELOW) root.setAttribute(FROST_ATTR, '')
+  else root.removeAttribute(FROST_ATTR)
+  applyFrostOpacity(S.config?.frostOpacity)
+  applyContentAlpha(Number(S.config?.contentAlpha))
+}
+
+/**
+ * How transparent the frosted surfaces are.
+ *
+ * The setting says "transparency" because that is the knob people reach for, but
+ * `color-mix` needs the opposite number — the share of panel colour that stays —
+ * so it is inverted here, once, instead of at every rule.
+ *
+ * The blur rides the same number: a frosted pane reads as "not transparent" mostly
+ * because it smears what is behind it, and a fully transparent pane that still
+ * blurs 18px looks like milk. At 100 both are zero and the pane is plain glass.
+ *
+ * @param percent - 0..100 of transparency; 0 is a solid card.
+ */
+function applyFrostOpacity(percent) {
+  if (typeof document === 'undefined') return
+  const number = Number(percent)
+  const value = Math.min(100, Math.max(0, Number.isFinite(number) ? number : 28))
+  const root = document.documentElement
+  root.style.setProperty('--dsh-l2d-frost-alpha', `${100 - value}%`)
+  root.style.setProperty('--dsh-l2d-frost-blur', `${((1 - value / 100) * FROST_BLUR_MAX).toFixed(1)}px`)
+}
+
 /**
  * Fade the content layers by a share of their own colour.
  *
@@ -3367,7 +3426,9 @@ function applyContentAlpha(percent) {
   const root = document.documentElement
   const number = Number(percent)
   const value = Math.min(100, Math.max(0, Number.isFinite(number) ? number : 100))
-  if (value >= 100) {
+  // Frosted delivery owns the surfaces itself: the clear pass must not fight the
+  // frost rules for the same elements.
+  if (value >= 100 || root.hasAttribute(FROST_ATTR)) {
     root.removeAttribute(CLEAR_ATTR)
     root.style.removeProperty('--dsh-l2d-clear-alpha')
     for (const marked of document.querySelectorAll(`[${CLEAR_FRAME_ATTR}]`)) {
@@ -3401,7 +3462,7 @@ function watchLayout() {
     if (S.disposed) return
     // The frame is re-rendered with the shell, so keep the marker on whatever
     // element is current before anything else looks at the layout.
-    if (Number(S.config?.contentAlpha) < 100) tagClearFrame()
+    if (Number(S.config?.contentAlpha) < 100 && !document.documentElement.hasAttribute(FROST_ATTR)) tagClearFrame()
     if (S.app === null && S.vrm === null) {
       // The shell can mount after this plugin activates; retry the stage then.
       if (!S.starting && S.config !== null && anchorFor(S.config.placement[0] ?? 'chat') !== null) {
@@ -3465,7 +3526,9 @@ async function refreshDisplayConfig() {
   if (next.stageState !== undefined && next.stageState !== null) S.persist = normalizePersist(next.stageState)
   // The transparency switch is a document-level style, so it adopts instantly —
   // before the early returns below (a 3D stage or a still-booting one skips the
-  // placement refresh but must still honour the switch).
+  // placement refresh but must still honour the switch). The stage opacity picks
+  // which of the two deliveries runs, and re-runs the clear pass itself.
+  applyFrostMode(next.opacity)
   applyContentAlpha(next.contentAlpha)
   // Bubble size, opacity and font size need no rebuild: they are three CSS
   // variables the running page can adopt on the spot.
@@ -3664,11 +3727,25 @@ async function mountSettingsForm(container) {
   }
   /** Fields whose choices come from the Host (`ttsModels` / `ttsVoices`). */
   const optionLists = new Map()
-  /** Whether one `showWhen` rule holds for the current draft. */
+  /**
+   * Whether one `showWhen` rule holds for the current draft.
+   *
+   * Numeric rules compare the stored value (`opacity` stays a 0–1 ratio even though
+   * the form shows percent), so a rule and the renderer can never disagree about
+   * which delivery is live.
+   */
   const ruleHolds = (rule) => {
     const value = draft[rule.key]
     if (rule.notEquals !== undefined) return value !== rule.notEquals
     if (Array.isArray(rule.oneOf)) return rule.oneOf.includes(value)
+    if (rule.below !== undefined || rule.atLeast !== undefined) {
+      const number = Number(value)
+      // A half-typed box must not make both rows of a pair disappear.
+      if (value === '' || value === null || value === undefined || !Number.isFinite(number)) return true
+      if (rule.below !== undefined && !(number < rule.below)) return false
+      if (rule.atLeast !== undefined && !(number >= rule.atLeast)) return false
+      return true
+    }
     return value === rule.equals
   }
   const syncConditionals = () => {
@@ -3685,7 +3762,10 @@ async function mountSettingsForm(container) {
     }
     // The description is a hover hint, not a line: it would double the height of
     // every row for text that is read once.
-    const label = el('label', { for: `dsh-l2d-set-${field.key}`, text: field.label })
+    const label = el('label', {
+      for: `dsh-l2d-set-${field.key}`,
+      text: field.percent === true ? `${field.label}(%)` : field.label,
+    })
     if (field.hint !== undefined) {
       // Every field keeps its description on hover only, switches included.
       cell.title = field.hint
@@ -3695,9 +3775,9 @@ async function mountSettingsForm(container) {
     const onChange = (value) => {
       draft[field.key] = value
       if (field.section === 'bubble') syncBubblePreview?.()
-      // Transparency is a document variable, not a saved number the stage has to
-      // reload: apply it now so the slider shows what it does before saving.
-      if (field.key === 'contentAlpha') applyContentAlpha(value)
+      // The glass concentration is a document variable, not a saved number the
+      // stage has to reload: apply it now, before the save lands.
+      if (field.key === 'frostOpacity') applyFrostOpacity(value)
       syncConditionals()
       commit(field.kind === 'text' ? 500 : 120)
     }
@@ -3717,7 +3797,7 @@ async function mountSettingsForm(container) {
       : el('button', {
         class: 'reset',
         text: '↺',
-        title: `还原：${fallback === '' ? '空' : String(fallback)}`,
+        title: `还原：${fallback === '' ? '空' : (field.percent === true ? `${ratioToPercentText(fallback)}%` : String(fallback))}`,
         onclick: (event) => {
           event.preventDefault()
           draft[field.key] = fallback
@@ -4165,6 +4245,30 @@ async function refreshPackStatus(status, value) {
 }
 
 /**
+ * Turn a stored 0–1 ratio into the percentage the form shows for `percent` fields.
+ *
+ * @param value - Stored ratio, possibly missing.
+ * @returns Input text; empty when there is no usable number.
+ */
+function ratioToPercentText(value) {
+  const number = Number(value)
+  if (value === '' || value === null || value === undefined || !Number.isFinite(number)) return ''
+  return String(Math.round(number * 1000) / 10)
+}
+
+/**
+ * Turn what was typed into a `percent` field back into the stored 0–1 ratio.
+ *
+ * @param text - Raw input text, e.g. `60`.
+ * @returns The ratio to save; an empty box means 0.
+ */
+function percentTextToRatio(text) {
+  if (text === '') return 0
+  const number = Number(text)
+  return Number.isFinite(number) ? number / 100 : 0
+}
+
+/**
  * Build one settings control.
  *
  * @returns The element to mount and a setter used by the reset button, so a
@@ -4201,18 +4305,35 @@ function buildControl(field, value, onChange) {
     wrap.append(input, track)
     return { node: wrap, set: (next) => { input.checked = next === true } }
   }
+  // A `percent` field stores a 0–1 ratio but reads and writes whole percentages, so the
+  // number in the box is the one a person would say out loud.
+  const percent = field.percent === true
   const kind = field.kind === 'number' ? 'number' : 'text'
-  const input = el('input', { id, type: kind, value: String(value ?? '') })
-  if (kind === 'number') input.step = 'any'
+  const shown = percent ? ratioToPercentText(value) : String(value ?? '')
+  const input = el('input', { id, type: kind, value: shown })
+  if (kind === 'number') {
+    input.step = percent ? '1' : 'any'
+    if (percent) {
+      input.min = '0'
+      input.max = '100'
+    }
+  }
   input.addEventListener('input', () => {
     if (kind === 'number') {
+      if (percent) {
+        onChange(percentTextToRatio(input.value))
+        return
+      }
       onChange(input.value === '' ? 0 : Number(input.value))
       return
     }
     onChange(input.value)
   })
   if (field.pick !== 'directory') {
-    return { node: input, set: (next) => { input.value = String(next ?? '') } }
+    return {
+      node: input,
+      set: (next) => { input.value = percent ? ratioToPercentText(next) : String(next ?? '') },
+    }
   }
   // Two ways to name a folder: the Host's native chooser when it has one, and the plugin's own
   // browser otherwise (the Android WebView has neither a system dialog nor the File System
@@ -5678,6 +5799,7 @@ async function boot() {
   }
   if (S.disposed) return
   applyBubbleStyle(S.config)
+  applyFrostMode(S.config.opacity)
   applyContentAlpha(S.config.contentAlpha)
   preloadVrm(S.config)
   // Booting the stage must not hold up the plugin table: the shell may still
@@ -5793,6 +5915,9 @@ function dispose() {
   S.speech = null
   S.pendingSpeech = null
   clearBubbleStyle()
+  document.documentElement.removeAttribute(FROST_ATTR)
+  document.documentElement.style.removeProperty('--dsh-l2d-frost-alpha')
+  document.documentElement.style.removeProperty('--dsh-l2d-frost-blur')
   applyContentAlpha(100)
   S.dragBox = null
   S.pointerGestures = false

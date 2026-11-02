@@ -1035,13 +1035,12 @@ test('settings round-trip through the file and layer over the row', async () => 
 
     const saved = await call(route, {
       method: 'POST',
-      body: JSON.stringify({ placement: 'sidebar', opacity: 0.8, contentAlpha: 40, directorMode: 'off' }),
+      body: JSON.stringify({ placement: 'sidebar', opacity: 0.8, directorMode: 'off' }),
     })
     assert.equal(saved.statusCode, 200)
     const onDisk = JSON.parse(await readFile(join(home, 'live2d', 'settings.json'), 'utf8'))
     assert.equal(onDisk.placement, 'sidebar')
     assert.equal(onDisk.opacity, 0.8)
-    assert.equal(onDisk.contentAlpha, 40)
 
     // A fresh activation layers the stored values over the Cordis row.
     const second = fakeContext()
@@ -1049,13 +1048,14 @@ test('settings round-trip through the file and layer over the row', async () => 
     const config = JSON.parse((await call(second.find('/dsh-live-tavern-lite/config'))).text)
     assert.deepEqual(config.placement, ['sidebar'])
     assert.equal(config.opacity, 0.8)
-    // The transparency level reaches the browser through /config, which is how
-    // the running page learns about it without a reload.
-    assert.equal(config.contentAlpha, 40)
+    // The wash is derived from the stage opacity, and reaches the browser through
+    // /config — that is how the running page learns about it without a reload.
+    assert.equal(config.contentAlpha, 80)
 
-    // It is a number, not a truthy string.
-    const badTransparent = await call(route, { method: 'POST', body: JSON.stringify({ contentAlpha: 'on' }) })
-    assert.equal(badTransparent.statusCode, 400)
+    // 内容层透明度 lost its own field when the wash started following the stage
+    // opacity, so an old client posting it is refused like any unknown key.
+    const retiredWash = await call(route, { method: 'POST', body: JSON.stringify({ contentAlpha: 40 }) })
+    assert.equal(retiredWash.statusCode, 400)
 
     // Unknown keys and out-of-range values are refused, never stored.
     const unknown = await call(route, { method: 'POST', body: JSON.stringify({ nope: 1 }) })
@@ -1066,8 +1066,100 @@ test('settings round-trip through the file and layer over the row', async () => 
     const badType = await call(route, { method: 'POST', body: JSON.stringify({ opacity: 'big' }) })
     assert.equal(badType.statusCode, 400)
 
+    // The stage opacity spans the whole range: 0 hides her completely, and anything
+    // past the top is clamped instead of handed to the renderer as a brighter-than-white alpha.
+    const readOpacity = async () => {
+      const probe = fakeContext()
+      apply(probe.ctx, { placement: 'chat' })
+      const value = JSON.parse((await call(probe.find('/dsh-live-tavern-lite/config'))).text).opacity
+      probe.disposeAll()
+      return value
+    }
+    await call(route, { method: 'POST', body: JSON.stringify({ opacity: 0 }) })
+    assert.equal(await readOpacity(), 0)
+    await call(route, { method: 'POST', body: JSON.stringify({ opacity: 1.6 }) })
+    assert.equal(await readOpacity(), 1)
+
     harness.disposeAll()
     second.disposeAll()
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+  }
+})
+
+test('the opacity fields read as percentages over an unchanged 0–1 ratio', async () => {
+  const harness = fakeContext()
+  apply(harness.ctx, { placement: 'chat' })
+  const payload = JSON.parse((await call(harness.find('/dsh-live-tavern-lite/settings'))).text)
+  // The form shows percentages, the renderer keeps reading the ratio: an existing
+  // settings file stays valid, so the unit change needs no migration.
+  for (const key of ['opacity', 'bubbleOpacity']) {
+    const field = payload.fields.find(entry => entry.key === key)
+    assert.equal(field?.percent, true, `${key} is shown as a percentage`)
+    assert.ok(payload.values[key] <= 1, `${key} still stores a ratio`)
+  }
+  harness.disposeAll()
+})
+
+test('the glass transparency is stored as the number the form shows', async () => {
+  const previousHome = process.env.DSH_HOME
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-frost-'))
+  process.env.DSH_HOME = home
+  try {
+    const harness = fakeContext()
+    apply(harness.ctx, { placement: 'chat' })
+    const route = harness.find('/dsh-live-tavern-lite/settings')
+    const readFrost = async () => {
+      const probe = fakeContext()
+      apply(probe.ctx, { placement: 'chat' })
+      const value = JSON.parse((await call(probe.find('/dsh-live-tavern-lite/config'))).text).frostOpacity
+      probe.disposeAll()
+      return value
+    }
+    assert.equal(await readFrost(), 28, 'a fresh install starts at the built-in transparency')
+    await call(route, { method: 'POST', body: JSON.stringify({ frostOpacity: 60 }) })
+    assert.equal(await readFrost(), 60)
+    // Higher means more transparent, so the browser inverts it for color-mix; the
+    // stored number stays the one a person typed.
+    await call(route, { method: 'POST', body: JSON.stringify({ frostOpacity: -20 }) })
+    assert.equal(await readFrost(), 0)
+    await call(route, { method: 'POST', body: JSON.stringify({ frostOpacity: 160 }) })
+    assert.equal(await readFrost(), 100)
+    harness.disposeAll()
+  } finally {
+    if (previousHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousHome
+  }
+})
+
+test('the whole-page wash follows the stage opacity and has no control of its own', async () => {
+  assert.equal(
+    internals.settingsFields.some(field => field.key === 'contentAlpha'),
+    false,
+    'the wash is derived, so it must not offer a second number to keep in sync',
+  )
+  const previousHome = process.env.DSH_HOME
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-wash-'))
+  process.env.DSH_HOME = home
+  try {
+    const harness = fakeContext()
+    apply(harness.ctx, { placement: 'chat' })
+    const route = harness.find('/dsh-live-tavern-lite/settings')
+    const readWash = async () => {
+      const probe = fakeContext()
+      apply(probe.ctx, { placement: 'chat' })
+      const value = JSON.parse((await call(probe.find('/dsh-live-tavern-lite/config'))).text).contentAlpha
+      probe.disposeAll()
+      return value
+    }
+    // Same number as the stage opacity, in percent: a stage that is three tenths
+    // visible keeps three tenths of the panel colour.
+    await call(route, { method: 'POST', body: JSON.stringify({ opacity: 0.6 }) })
+    assert.equal(await readWash(), 60)
+    await call(route, { method: 'POST', body: JSON.stringify({ opacity: 1 }) })
+    assert.equal(await readWash(), 100, 'a fully opaque stage leaves the shell stock')
+    harness.disposeAll()
   } finally {
     if (previousHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previousHome

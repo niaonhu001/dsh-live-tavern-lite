@@ -89,6 +89,36 @@ test('the Cubism runtime is parsed before the module table registration', async 
   assert.match(source, /id: 'dsh-live-tavern-lite'/)
 })
 
+test('the frosted low-opacity delivery covers input, bubbles and the assistant body', async () => {
+  const source = await readFile(ARTIFACT, 'utf8')
+  // The hooks are the shipped shell's own attributes and class stems: the input
+  // card and the message bubble carry them verbatim, while the assistant body is
+  // the `assistant-step` flow kind — `assistant` is only the folded final
+  // message and never owns a flow row, so a rule keyed on it is dead.
+  for (const hook of ['[data-composer-card]', '[class*="bubble"]', '[data-chat-flow-kind="assistant-step"]']) {
+    assert.ok(source.includes(hook), `frost rules target ${hook}`)
+  }
+  assert.match(source, /data-dsh-l2d-frost/)
+  // Transparency is one document variable the settings form moves, so a hard-coded
+  // colour-mix percentage would silently pin the glass again.
+  assert.match(source, /--dsh-l2d-frost-alpha/)
+  // The blur rides the same setting: a pane that blurs 18px still reads as opaque
+  // even when its colour share is zero, so both have to come from the variable.
+  assert.match(source, /--dsh-l2d-frost-blur/)
+  assert.doesNotMatch(source, /backdrop-filter:blur\(18px\)/, 'no pinned blur radius')
+  // The frame and the centre column sit between her layer and those panels: an
+  // opaque fill there leaves the glass blurring a flat backdrop, which is why the
+  // concentration used to look inert.
+  assert.ok(
+    source.includes('html[data-dsh-l2d-frost] [data-dsh-l2d-frame]'),
+    'frost clears the frame fill',
+  )
+  assert.ok(
+    source.includes('html[data-dsh-l2d-frost] [class*="centerCol"]'),
+    'frost clears the centre column fill',
+  )
+})
+
 test('the wrapper is self-contained and exposes only apply', async () => {
   const source = await readFile(ARTIFACT, 'utf8')
   // The module table cannot load split chunks, so nothing may be dynamic.
