@@ -45,6 +45,7 @@ const FALLBACK_DEFAULTS = {
   playerName: '玩家',
   textureLod: 'full',
   opacity: 1,
+  frost: false,
   frostOpacity: 28,
   lookAtPointer: false,
   hitBoxScale: 1,
@@ -366,7 +367,14 @@ const CSS = `
 .dsh-l2d-wb .wb-preset-meta{width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:rgba(78,50,23,.08);color:#8a8175;font-size:10px;cursor:help}
 .dsh-l2d-wb .wb-preset-row button{padding:2px 7px;border:1px solid rgba(78,50,23,.18);border-radius:5px;background:#fff;font:11px/1.4 ui-sans-serif,system-ui;cursor:pointer}
 .dsh-l2d-wb .wb-left{display:flex;flex-direction:column;gap:8px;padding:12px;border-right:1px solid #e8e2db;min-height:0;overflow:hidden}
-.dsh-l2d-wb .wb-left>input[type=text]{font:12px/1.4 ui-sans-serif,system-ui;padding:6px 8px;border-radius:8px;border:1px solid rgba(78,50,23,.18);background:#fff}
+.dsh-l2d-wb .wb-tabs{flex:0 0 auto;display:flex;gap:4px;border-bottom:1px solid rgba(78,50,23,.12)}
+.dsh-l2d-wb .wb-tab{font:11.5px/1 ui-sans-serif,system-ui;padding:8px 14px;border-radius:7px 7px 0 0;border:1px solid transparent;border-bottom:none;background:none;color:#8a8175;cursor:pointer;margin-bottom:-1px}
+.dsh-l2d-wb .wb-tab:hover{color:#2b241d}
+.dsh-l2d-wb .wb-tab[data-on="1"]{background:#fff;border-color:rgba(78,50,23,.14);color:#2b241d}
+.dsh-l2d-wb .wb-panes{flex:1 1 auto;min-height:0;display:flex}
+.dsh-l2d-wb .wb-pane{flex:1 1 auto;display:flex;flex-direction:column;gap:8px;min-height:0;overflow:hidden}
+.dsh-l2d-wb .wb-pane[hidden]{display:none}
+.dsh-l2d-wb .wb-left>input[type=text],.dsh-l2d-wb .wb-pane>input[type=text]{font:12px/1.4 ui-sans-serif,system-ui;padding:6px 8px;border-radius:8px;border:1px solid rgba(78,50,23,.18);background:#fff}
 .dsh-l2d-wb .wb-list{flex:1 1 auto;min-height:80px;overflow:auto;border:1px solid rgba(78,50,23,.1);border-radius:10px;padding:4px 8px}
 .dsh-l2d-wb .wb-recipe{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(78,50,23,.12)}
 .dsh-l2d-wb .wb-presets-split{flex:0 0 auto;height:7px;margin:2px 0;border-radius:4px;background:rgba(78,50,23,.06);cursor:row-resize}
@@ -386,6 +394,32 @@ const CSS = `
 .dsh-l2d-wb .wb-split:hover,.dsh-l2d-wb .wb-split.dragging{background:#e2d8cd}
 .dsh-l2d-wb .wb-right{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 40%,#faf7f4,#efe9e2 70%)}
 .dsh-l2d-wb .wb-stage{position:absolute;inset:0;cursor:grab;touch-action:none}
+.dsh-l2d-wb .wb-region-layer{position:absolute;inset:0;z-index:6;pointer-events:none}
+.dsh-l2d-wb .wb-region-layer[hidden]{display:none}
+.dsh-l2d-wb .wb-region-layer[data-draw="1"]{pointer-events:auto;cursor:crosshair}
+.dsh-l2d-wb .wb-shapes{display:flex;gap:4px;margin-bottom:6px;flex:0 0 auto}
+.dsh-l2d-wb .wb-shape{flex:1 1 0;font:11.5px/1 ui-sans-serif,system-ui;padding:7px 0;border-radius:7px;border:1px solid rgba(78,50,23,.16);background:#fff;color:#5b5247;cursor:pointer}
+.dsh-l2d-wb .wb-shape[data-on="1"]{background:#186098;border-color:#186098;color:#fff}
+.dsh-l2d-wb .wb-region-svg{position:absolute;left:0;top:0;pointer-events:none}
+.dsh-l2d-wb .wb-region-label{font:10.5px/1 ui-sans-serif,system-ui;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}
+.dsh-l2d-wb .wb-region-draft{opacity:.8}
+.dsh-l2d-wb .wb-region-draft rect,.dsh-l2d-wb .wb-region-draft ellipse,.dsh-l2d-wb .wb-region-draft polyline,.dsh-l2d-wb .wb-region-draft polygon{fill:rgba(58,132,196,.1);stroke:#186098;stroke-width:1;stroke-dasharray:4 3}
+.dsh-l2d-wb .wb-region-draft circle{fill:#186098;stroke:none}
+.dsh-l2d-wb .wb-regions{flex:0 0 auto;padding-top:8px;border-top:1px solid rgba(78,50,23,.12)}
+.dsh-l2d-wb .wb-regions h4{margin:0 0 6px;font:600 12px/1.4 ui-sans-serif,system-ui;color:#2b241d}
+.dsh-l2d-wb .wb-region-tools{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.dsh-l2d-wb .wb-region-tools button{font:11.5px/1 ui-sans-serif,system-ui;padding:6px 10px;border-radius:7px;border:1px solid rgba(78,50,23,.18);background:#fff;color:#2b241d;cursor:pointer}
+.dsh-l2d-wb .wb-region-tools button[data-on="1"]{background:#186098;border-color:#186098;color:#fff}
+.dsh-l2d-wb .wb-region-list{display:flex;flex-direction:column;gap:3px;max-height:148px;overflow:auto}
+.dsh-l2d-wb .wb-region-row{display:grid;grid-template-columns:16px 1fr 24px 22px 22px 22px;gap:4px;align-items:center}
+.dsh-l2d-wb .wb-region-row .stk{font:10px/1 ui-monospace,monospace;color:#a0968a;text-align:center;padding-bottom:1px}
+.dsh-l2d-wb .wb-region-row input{font-size:11.5px;padding:3px 6px;border-radius:6px;border:1px solid rgba(78,50,23,.14);min-width:0}
+.dsh-l2d-wb .wb-region-row button{font:11px/1 ui-sans-serif,system-ui;padding:5px 0;border-radius:5px;border:1px solid rgba(78,50,23,.14);background:#fff;color:#5b5247;cursor:pointer}
+.dsh-l2d-wb .wb-region-row button:disabled{opacity:.3;cursor:default}
+.dsh-l2d-wb .wb-region-row .wb-eye{display:flex;align-items:center;justify-content:center;padding:3px 0;color:#5b5247}
+.dsh-l2d-wb .wb-region-row .wb-eye[data-off="1"]{color:#c0b7ad}
+.dsh-l2d-touch{position:fixed;z-index:2147482700;transform:translate(-50%,-150%);font:11.5px/1 ui-sans-serif,system-ui;padding:5px 10px;border-radius:999px;background:rgba(24,96,152,.92);color:#fff;pointer-events:none;animation:dsh-l2d-touch-gone 1.05s ease-out forwards}
+@keyframes dsh-l2d-touch-gone{0%{opacity:0}10%{opacity:1}68%{opacity:1}100%{opacity:0}}
 .dsh-l2d-wb .wb-stage.dragging{cursor:grabbing}
 .dsh-l2d-wb .wb-hint{position:absolute;left:14px;bottom:12px;font-size:11.5px;color:#8a8175;pointer-events:none}
 body.dsh-l2d-grabbing,body.dsh-l2d-grabbing *{cursor:grabbing !important}
@@ -478,6 +512,10 @@ const S = {
   visibleSignature: undefined,
   modelLoadedAt: 0,
   dragging: false,
+  /** Redraws the workbench's touch-region shapes; set only while it is open. */
+  repaintRegions: null,
+  /** The workbench's Escape handler, removed when the workbench closes. */
+  regionKeys: null,
   binding: { version: 1, expressions: {} },
   probe: null,
   /** Per-frame easing factor for parameter targets; `easeMs` on a frame overrides it. */
@@ -1023,12 +1061,14 @@ function resetLayout(reason = 'manual') {
  *
  * @returns `{ left, top, width, height }`, or undefined before the model loads.
  */
-function modelScreenRect() {
+function modelScreenRect(options = {}) {
   if (S.kind === 'vrm') return vrmScreenRect()
   if (!S.app || !S.model) return undefined
   const rect = S.app.canvas.getBoundingClientRect()
   const scale = Math.abs(S.model.scale.y || 1)
-  const factor = Number(S.config?.hitBoxScale)
+  // The hit box may be padded; a touch region must not be, or it stops matching the
+  // place it was drawn on.
+  const factor = options.padded === false ? 1 : Number(S.config?.hitBoxScale)
   const reach = Number.isFinite(factor) ? Math.min(2, Math.max(0.2, factor)) : 1
   const rel = S.visibleRel ?? { left: 0, top: 0, width: 1, height: 1 }
   const width = (S.baseWidth || 0) * rel.width * scale * reach
@@ -1037,12 +1077,29 @@ function modelScreenRect() {
   // Scaled around her feet: a bigger hit box grows upward and sideways, never
   // off the ground she stands on.
   const centreShift = (rel.left + rel.width / 2 - 0.5) * (S.baseWidth || 0) * scale
+  // The workbench nudges the model without changing the saved layout, and `fitModel`
+  // applies that nudge to the sprite: a rectangle that ignored it would sit where she
+  // used to be.
+  const shift = S.workbenchPane === null ? { x: 0, y: 0 } : S.workbenchOffset
   return {
-    left: rect.left + rect.width / 2 + S.layout.model.x - centreShift - width / 2,
-    top: rect.top + rect.height + S.layout.model.y - height,
+    left: rect.left + rect.width / 2 + S.layout.model.x + shift.x - centreShift - width / 2,
+    top: rect.top + rect.height + S.layout.model.y + shift.y - height,
     width,
     height,
   }
+}
+
+/**
+ * The frame a touch region is measured in.
+ *
+ * Regions describe pieces of the character, so they are measured against the drawn
+ * artwork — but never with the hit-box padding `modelScreenRect()` may add, because a
+ * region has to stay exactly where the player drew it.
+ *
+ * @returns `{ left, top, width, height }` in CSS pixels, or undefined before load.
+ */
+function regionFrameRect() {
+  return modelScreenRect({ padded: false })
 }
 
 /** Whether a pointer event landed on her body. */
@@ -1052,6 +1109,332 @@ function isModelHit(event) {
   const x = event.clientX
   const y = event.clientY
   return x >= area.left && x <= area.left + area.width && y >= area.top && y <= area.top + area.height
+}
+
+/**
+ * Which shape a region uses: `rect`, `ellipse`, `polygon` or `brush`.
+ *
+ * A region saved before shapes existed carries no `shape`, and a rectangle is what
+ * it meant — so the default is the old behaviour, not an error.
+ */
+function regionShape(region) {
+  const shape = region?.shape
+  return shape === 'ellipse' || shape === 'polygon' || shape === 'brush' ? shape : 'rect'
+}
+
+/** Point inside a rectangle; both arguments are fractions of the model box. */
+function inRect(region, x, y) {
+  return x >= region.x && x <= region.x + region.w && y >= region.y && y <= region.y + region.h
+}
+
+/** Point inside the ellipse inscribed in the box a rectangle would have used. */
+function inEllipse(region, x, y) {
+  const rx = region.w / 2
+  const ry = region.h / 2
+  if (!(rx > 0) || !(ry > 0)) return false
+  const dx = (x - (region.x + rx)) / rx
+  const dy = (y - (region.y + ry)) / ry
+  return dx * dx + dy * dy <= 1
+}
+
+/** Even-odd ray casting. The points are fractions, so the axis scaling does not matter. */
+function inPolygon(points, x, y) {
+  let inside = false
+  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+    const xi = points[i][0]
+    const yi = points[i][1]
+    const xj = points[j][0]
+    const yj = points[j][1]
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+/** Distance from a point to a segment, all three points in the same unit. */
+function distanceToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax
+  const dy = by - ay
+  const length = dx * dx + dy * dy
+  const t = length === 0 ? 0 : Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / length))
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+}
+
+/**
+ * A lasso: the point is inside the ring the stroke closed.
+ *
+ * The ring is the outline itself, so the test is the polygon one, with a fallback to
+ * the stroke's own width: a degenerate scribble that encloses nothing still answers
+ * for its own pixels instead of matching nothing at all.
+ */
+function inBrush(region, area, clientX, clientY) {
+  const points = Array.isArray(region.points) ? region.points : []
+  if (points.length === 0) return false
+  if (points.length >= 3 && inPolygon(points, (clientX - area.left) / area.width, (clientY - area.top) / area.height)) return true
+  const radius = Math.max(1, (Number(region.radius) || 0.012) * area.width)
+  const px = (point) => area.left + point[0] * area.width
+  const py = (point) => area.top + point[1] * area.height
+  if (points.length === 1) return Math.hypot(clientX - px(points[0]), clientY - py(points[0])) <= radius
+  for (let i = 1; i < points.length; i += 1) {
+    const near = distanceToSegment(
+      clientX,
+      clientY,
+      px(points[i - 1]),
+      py(points[i - 1]),
+      px(points[i]),
+      py(points[i]),
+    )
+    if (near <= radius) return true
+  }
+  return false
+}
+
+/**
+ * The named region a screen point falls in, or null.
+ *
+ * Regions are fractions of the visible model box, so the answer survives a resize,
+ * a re-fit or a different browser. The list is a stack: index 0 is on top, and the
+ * first shape containing the point wins — that is what the workbench's up/down
+ * controls are reordering.
+ *
+ * @param clientX - Pointer position in CSS pixels.
+ * @param clientY - Pointer position in CSS pixels.
+ * @returns The matched region, or null when the point misses every one.
+ */
+function regionAt(clientX, clientY) {
+  const regions = S.config?.regions
+  if (!Array.isArray(regions) || regions.length === 0) return null
+  const area = regionFrameRect()
+  if (area === undefined) return null
+  // No early bail on the model box: a region may be drawn past the artwork, and a
+  // press there still has to reach it.
+  const x = (clientX - area.left) / area.width
+  const y = (clientY - area.top) / area.height
+  for (const region of regions) {
+    const shape = regionShape(region)
+    if (shape === 'ellipse') {
+      if (inEllipse(region, x, y)) return region
+      continue
+    }
+    if (shape === 'polygon') {
+      const points = Array.isArray(region.points) ? region.points : []
+      if (points.length >= 3 && inPolygon(points, x, y)) return region
+      continue
+    }
+    if (shape === 'brush') {
+      if (inBrush(region, area, clientX, clientY)) return region
+      continue
+    }
+    if (inRect(region, x, y)) return region
+  }
+  return null
+}
+
+/** One colour per region, in stack order: distinct enough to tell at a glance. */
+const REGION_COLORS = ['#186098', '#c0622a', '#2f7d5c', '#8b4a8f', '#a8443f', '#8a6b1f', '#3d6b8c', '#5a5f8a']
+
+/** The colour a region at this stack position is drawn in. */
+function regionColor(index) {
+  return REGION_COLORS[index % REGION_COLORS.length]
+}
+
+/**
+ * An eye glyph for one row: open while the region is drawn, crossed out when hidden.
+ *
+ * Built as SVG nodes rather than markup so the glyph follows the panel's current text
+ * colour and needs no icon font.
+ */
+function eyeIcon(hidden) {
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('width', '13')
+  svg.setAttribute('height', '13')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('stroke', 'currentColor')
+  svg.setAttribute('stroke-width', '1.8')
+  svg.setAttribute('stroke-linecap', 'round')
+  const outline = document.createElementNS(SVG_NS, 'path')
+  outline.setAttribute('d', hidden
+    ? 'M3 12s3.4-6 9-6 9 6 9 6-3.4 6-9 6-9-6-9-6z'
+    : 'M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z')
+  svg.append(outline)
+  if (hidden) {
+    outline.setAttribute('opacity', '.4')
+    const slash = document.createElementNS(SVG_NS, 'line')
+    slash.setAttribute('x1', '4')
+    slash.setAttribute('y1', '20')
+    slash.setAttribute('x2', '20')
+    slash.setAttribute('y2', '4')
+    svg.append(slash)
+  } else {
+    const pupil = document.createElementNS(SVG_NS, 'circle')
+    pupil.setAttribute('cx', '12')
+    pupil.setAttribute('cy', '12')
+    pupil.setAttribute('r', '2.6')
+    svg.append(pupil)
+  }
+  return svg
+}
+
+/**
+ * Flash the region's name where the player pressed.
+ *
+ * A region that does nothing visible is indistinguishable from a broken one, so a
+ * successful hit answers immediately on stage; the tag removes itself.
+ */
+function showTouchTag(name, clientX, clientY) {
+  const tag = el('div', { class: 'dsh-l2d-touch', text: name })
+  tag.style.left = `${Math.round(clientX)}px`
+  tag.style.top = `${Math.round(clientY)}px`
+  document.body.append(tag)
+  window.setTimeout(() => tag.remove(), 1100)
+}
+
+/** The SVG namespace; every region is drawn in it, whatever its shape. */
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+/** What each drawing tool means, shown while it is the active one. */
+const SHAPE_HINTS = {
+  rect: '在模型上拖一个矩形',
+  ellipse: '拖出椭圆的外框',
+  polygon: '逐个点顶点，点回起点闭合',
+  brush: '按住圈一圈，松开就是圈里那整块',
+}
+
+/** Every shape's name as the region list spells it. */
+const SHAPE_NAMES = { rect: '矩形', ellipse: '椭圆', polygon: '多边形', brush: '画笔' }
+
+/** Where a region's name tag sits, as a fraction of the model box. */
+function regionAnchor(region) {
+  const shape = regionShape(region)
+  if (shape === 'polygon' || shape === 'brush') {
+    const points = Array.isArray(region.points) ? region.points : []
+    let minX = 1
+    let minY = 1
+    for (const point of points) {
+      if (point[0] < minX) minX = point[0]
+      if (point[1] < minY) minY = point[1]
+    }
+    return { x: points.length === 0 ? 0 : minX, y: points.length === 0 ? 0 : minY }
+  }
+  return { x: region.x, y: region.y }
+}
+
+/**
+ * One region as an SVG group in stage pixels.
+ *
+ * Shapes are stored as fractions but drawn in pixels: a brush has one width on
+ * screen, so the two axes must not be scaled independently of each other.
+ *
+ * @param region - A stored region.
+ * @param ox - Left edge of the model box, relative to the stage.
+ * @param oy - Top edge of the model box, relative to the stage.
+ * @param area - The model box, `{ left, top, width, height }` in screen pixels.
+ * @param ns - The SVG namespace.
+ * @param color - Fill and stroke for this region.
+ * @returns A `<g>` holding the outline and the name, or null for an empty shape.
+ */
+function regionNode(region, ox, oy, area, ns, color = '#186098') {
+  const X = (value) => ox + value * area.width
+  const Y = (value) => oy + value * area.height
+  const shape = regionShape(region)
+  const points = Array.isArray(region.points) ? region.points : []
+  let node
+  if (shape === 'ellipse') {
+    node = document.createElementNS(ns, 'ellipse')
+    node.setAttribute('cx', String(X(region.x + region.w / 2)))
+    node.setAttribute('cy', String(Y(region.y + region.h / 2)))
+    node.setAttribute('rx', String(Math.max(0.5, (region.w / 2) * area.width)))
+    node.setAttribute('ry', String(Math.max(0.5, (region.h / 2) * area.height)))
+  } else if (shape === 'polygon' || shape === 'brush') {
+    if (points.length === 0) return null
+    // A lasso is a closed ring too: same polygon, same fill. What it enclosed is the
+    // region, not the line the pointer travelled.
+    node = document.createElementNS(ns, 'polygon')
+    node.setAttribute('points', points.map(point => `${X(point[0])},${Y(point[1])}`).join(' '))
+  } else {
+    node = document.createElementNS(ns, 'rect')
+    node.setAttribute('x', String(X(region.x)))
+    node.setAttribute('y', String(Y(region.y)))
+    node.setAttribute('width', String(Math.max(0.5, region.w * area.width)))
+    node.setAttribute('height', String(Math.max(0.5, region.h * area.height)))
+  }
+  node.setAttribute('stroke', color)
+  // Filled, not outlined: an empty ring makes two overlapping regions impossible to
+  // tell apart, which is the whole point of giving each one a colour.
+  node.setAttribute('fill', color)
+  node.setAttribute('fill-opacity', '0.3')
+  node.setAttribute('stroke-width', '1.5')
+  node.setAttribute('stroke-linejoin', 'round')
+  node.setAttribute('vector-effect', 'non-scaling-stroke')
+  const group = document.createElementNS(ns, 'g')
+  group.append(node)
+  const anchor = regionAnchor(region)
+  const label = document.createElementNS(ns, 'text')
+  label.setAttribute('class', 'wb-region-label')
+  label.setAttribute('x', String(X(anchor.x) + 3))
+  label.setAttribute('y', String(Y(anchor.y) - 5))
+  label.style.fill = color
+  label.textContent = region.name
+  group.append(label)
+  return group
+}
+
+/**
+ * The shape being drawn right now, as a dashed preview.
+ *
+ * @param drafting - The in-progress gesture.
+ * @param ox - Left edge of the model box, relative to the stage.
+ * @param oy - Top edge of the model box, relative to the stage.
+ * @param area - The model box in screen pixels.
+ * @param ns - The SVG namespace.
+ * @returns An SVG node, or null when there is nothing to preview yet.
+ */
+function draftingNode(drafting, ox, oy, area, ns) {
+  const X = (value) => ox + value * area.width
+  const Y = (value) => oy + value * area.height
+  const group = document.createElementNS(ns, 'g')
+  group.setAttribute('class', 'wb-region-draft')
+  if (drafting.kind === 'rect' || drafting.kind === 'ellipse') {
+    const current = drafting.current
+    if (current === undefined) return null
+    const x = Math.min(drafting.start.x, current.x)
+    const y = Math.min(drafting.start.y, current.y)
+    const w = Math.abs(current.x - drafting.start.x)
+    const h = Math.abs(current.y - drafting.start.y)
+    const node = document.createElementNS(ns, drafting.kind === 'ellipse' ? 'ellipse' : 'rect')
+    if (drafting.kind === 'ellipse') {
+      node.setAttribute('cx', String(X(x + w / 2)))
+      node.setAttribute('cy', String(Y(y + h / 2)))
+      node.setAttribute('rx', String(Math.max(0.5, (w / 2) * area.width)))
+      node.setAttribute('ry', String(Math.max(0.5, (h / 2) * area.height)))
+    } else {
+      node.setAttribute('x', String(X(x)))
+      node.setAttribute('y', String(Y(y)))
+      node.setAttribute('width', String(Math.max(0.5, w * area.width)))
+      node.setAttribute('height', String(Math.max(0.5, h * area.height)))
+    }
+    group.append(node)
+    return group
+  }
+  const points = drafting.kind === 'polygon'
+    ? (drafting.hover === undefined ? drafting.points : [...drafting.points, [drafting.hover.x, drafting.hover.y]])
+    : drafting.points
+  if (points.length === 0) return null
+  // A lasso previews as the ring it will become, not as the line drawn so far.
+  const line = document.createElementNS(ns, drafting.kind === 'brush' ? 'polygon' : 'polyline')
+  line.setAttribute('points', points.map(point => `${X(point[0])},${Y(point[1])}`).join(' '))
+  group.append(line)
+  if (drafting.kind === 'polygon') {
+    // Vertices are the only way to see where the ring will close.
+    for (const point of drafting.points) {
+      const dot = document.createElementNS(ns, 'circle')
+      dot.setAttribute('cx', String(X(point[0])))
+      dot.setAttribute('cy', String(Y(point[1])))
+      dot.setAttribute('r', '3')
+      group.append(dot)
+    }
+  }
+  return group
 }
 
 /**
@@ -1131,15 +1514,54 @@ const DOUBLE_TAP_MS = 320
 let pressState = null
 let lastTapAt = 0
 
+/**
+ * Whether a press at this point belongs to the shell rather than to her.
+ *
+ * The sidebar seat paints her behind the rail's own content, so a press there is
+ * usually the session list's. Her layer takes no pointers at all (`pointer-events:
+ * none`), which means `elementFromPoint` never returns the model — it returns
+ * whatever the shell drew on top of her. What is left is the landing element: a
+ * link, a button, a row or anything that advertises itself as clickable keeps the
+ * press; blank column does not, and that is where she can answer a tap.
+ *
+ * @param clientX - Pointer position in CSS pixels.
+ * @param clientY - Pointer position in CSS pixels.
+ * @returns True when the point is over content that should keep the press.
+ */
+function pressBelongsToShell(clientX, clientY) {
+  const top = document.elementFromPoint(clientX, clientY)
+  if (top === null) return false
+  let node = top
+  for (let depth = 0; node !== null && depth < 6; depth += 1) {
+    if (node.matches?.('a, button, input, textarea, select, label, summary, [role="button"], [role="menuitem"], [role="tab"], [role="option"], [contenteditable="true"]')) {
+      return true
+    }
+    let cursor = ''
+    try {
+      cursor = getComputedStyle(node).cursor
+    } catch {
+      // A detached node throws here; a missing style simply is not a click signal.
+    }
+    if (cursor === 'pointer') return true
+    node = node.parentElement
+  }
+  return false
+}
+
 function onModelPointerDown(event) {
   if (event.button !== 0) return
-  // Seats that paint above the content only: in the chat column the transcript
-  // covers her, and in the sidebar the rail's own rows do — a press there belongs
-  // to the shell, and stealing it would make the session list unclickable.
+  // The chat seat keeps the transcript above her, and that is the end of it: the
+  // transcript has no blank area worth handing back. The sidebar is different —
+  // most of it is the rail's own rows, but the column around them is empty, and a
+  // press there can reach her.
   const seat = S.primary?.placement
-  if (seat === undefined || seat === 'chat' || seat === 'sidebar') return
+  if (seat === undefined || seat === 'chat') return
   if (S.settingsOpen || S.workbenchPane !== null) return
-  if (!isModelHit(event)) return
+  // A named region counts even when it reaches past the drawn artwork: the frame is
+  // measured from the model, but the player drew the region where they drew it.
+  const region = S.kind === 'vrm' ? null : regionAt(event.clientX, event.clientY)
+  if (!isModelHit(event) && region === null) return
+  if (seat === 'sidebar' && pressBelongsToShell(event.clientX, event.clientY)) return
   event.preventDefault()
   try {
     document.body.setPointerCapture?.(event.pointerId)
@@ -1208,7 +1630,11 @@ function onModelPointerUp(event) {
     resetLayout('double-tap on the stage')
     return
   }
-  pingInteraction('tap')
+  // A tap on a named region says which part was touched: the tag answers on stage,
+  // and the name travels to the judge so an interaction can describe itself.
+  const region = S.kind === 'vrm' ? null : regionAt(event.clientX, event.clientY)
+  if (region !== null) showTouchTag(region.name, event.clientX, event.clientY)
+  pingInteraction('tap', region?.name ?? '')
 }
 
 /** Bind the gesture listeners once, on the document. */
@@ -1225,20 +1651,25 @@ function installPointerGestures() {
  * Tell the Host the player touched her.
  *
  * Only the cross-session mode has a judge to answer, so the request is skipped
- * when that switch is off; the Host re-checks anyway. A failure stays silent: a
- * pointer should never produce an error banner.
+ * when that switch is off; the Host re-checks anyway. A refusal is reported once
+ * every few seconds: a press that silently does nothing is indistinguishable from a
+ * broken region, and the reason (cooldown, budget, no judge) is worth seeing.
  *
  * @param kind - `tap` for a press without movement, `drag` for a moved model.
+ * @param region - Name of the touch region the tap landed in, empty when none.
  */
-function pingInteraction(kind) {
+let lastInteractNotice = 0
+function pingInteraction(kind, region = '') {
   if (S.config?.interaction !== true || S.config?.director !== true) return
   void fetchJson(`${API}/interact`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind }),
+    body: JSON.stringify({ kind, ...(region === '' ? {} : { region }) }),
   }).catch((error) => {
-    // A refused interaction is worth a console line, never a banner.
-    console.info('[dsh-live-tavern] interaction refused', error?.message ?? error)
+    const now = Date.now()
+    if (now - lastInteractNotice < 15_000) return
+    lastInteractNotice = now
+    showNotice(`互动没成：${error?.message ?? error}`)
   })
 }
 
@@ -3335,8 +3766,6 @@ const CLEAR_ATTR = 'data-dsh-l2d-clear'
 const CLEAR_FRAME_ATTR = 'data-dsh-l2d-frame'
 /** Attribute on `<html>` that swaps the clear rules for the frosted surfaces. */
 const FROST_ATTR = 'data-dsh-l2d-frost'
-/** Stage opacity below which the whole-page wash gives way to frosted glass. */
-const FROST_BELOW = 0.3
 /** Blur radius of a fully opaque frosted pane; it fades out as transparency rises. */
 const FROST_BLUR_MAX = 18
 
@@ -3372,22 +3801,21 @@ function tagClearFrame() {
 }
 
 /**
- * Switch the low-opacity delivery: whole-page wash or frosted glass.
+ * Switch the frosted delivery on or off.
  *
- * Below 30% she is a suggestion rather than a subject, so recolouring every panel
- * costs more than it shows. The clear rules stand down; only the conversation
- * column lets her through, behind a frosted input card and frosted message blocks
- * (the CSS in `FROST_ATTR`). The clear pass is re-run here because both are gated
- * on the same decision.
+ * It used to be a side effect of the stage opacity — below 30% the whole-page wash
+ * gave way to glass — which meant the look followed a number that was meant for
+ * something else. The switch is its own setting now, so glass can be on at any
+ * opacity and off at any opacity.
  *
- * @param opacity - Stage opacity, 0..1.
+ * @param on - Whether the frosted surfaces replace the clear pass; defaults to the
+ * saved setting.
  */
-function applyFrostMode(opacity) {
+function applyFrostMode(on) {
   if (typeof document === 'undefined') return
   const root = document.documentElement
-  const number = Number(opacity)
-  const value = Number.isFinite(number) ? Math.min(1, Math.max(0, number)) : 1
-  if (value < FROST_BELOW) root.setAttribute(FROST_ATTR, '')
+  const wanted = on === undefined ? S.config?.frost === true : on === true
+  if (wanted) root.setAttribute(FROST_ATTR, '')
   else root.removeAttribute(FROST_ATTR)
   applyFrostOpacity(S.config?.frostOpacity)
   applyContentAlpha(Number(S.config?.contentAlpha))
@@ -3531,9 +3959,9 @@ async function refreshDisplayConfig() {
   if (next.stageState !== undefined && next.stageState !== null) S.persist = normalizePersist(next.stageState)
   // The transparency switch is a document-level style, so it adopts instantly —
   // before the early returns below (a 3D stage or a still-booting one skips the
-  // placement refresh but must still honour the switch). The stage opacity picks
-  // which of the two deliveries runs, and re-runs the clear pass itself.
-  applyFrostMode(next.opacity)
+  // placement refresh but must still honour the switch). The frosted delivery and
+  // the clear pass are both gated on that same switch, and it re-runs them itself.
+  applyFrostMode(next.frost === true)
   applyContentAlpha(next.contentAlpha)
   // Bubble size, opacity and font size need no rebuild: they are three CSS
   // variables the running page can adopt on the spot.
@@ -3780,8 +4208,9 @@ async function mountSettingsForm(container) {
     const onChange = (value) => {
       draft[field.key] = value
       if (field.section === 'bubble') syncBubblePreview?.()
-      // The glass concentration is a document variable, not a saved number the
-      // stage has to reload: apply it now, before the save lands.
+      // The glass is a document attribute and a pair of variables, not a saved
+      // number the stage has to reload: apply it now, before the save lands.
+      if (field.key === 'frost') applyFrostMode(value === true)
       if (field.key === 'frostOpacity') applyFrostOpacity(value)
       syncConditionals()
       commit(field.kind === 'text' ? 500 : 120)
@@ -4850,6 +5279,11 @@ function openWorkbench() {
   const title = el('span', { class: 'wb-title', text: '参数工作台' })
   const state = el('span', { class: 'wb-state', text: '读取参数表…' })
   const stage = el('div', { class: 'wb-stage' })
+  // The touch-region editor draws here. It sits above the canvas and takes pointers
+  // only while its own draw mode is on.
+  const regionLayer = el('div', { class: 'wb-region-layer' })
+  regionLayer.dataset.draw = '0'
+  stage.append(regionLayer)
   const close = el('button', {
     class: 'wb-close',
     text: '关闭',
@@ -4936,6 +5370,8 @@ function openWorkbench() {
       stage.removeEventListener('pointermove', move)
       stage.removeEventListener('pointerup', stop)
       stage.removeEventListener('pointercancel', stop)
+      // The model moved under the touch-region rectangles; redraw them where it is now.
+      S.repaintRegions?.()
     }
     stage.addEventListener('pointermove', move)
     stage.addEventListener('pointerup', stop)
@@ -4948,6 +5384,8 @@ function openWorkbench() {
     S.workbenchHeight = Math.min(1.6, Math.max(0.2, (S.workbenchHeight ?? S.layout.height) * factor))
     if (S.kind === 'vrm') fitVrm()
     else fitModel()
+    // The touch-region frame is measured from the fitted model, so it moved too.
+    S.repaintRegions?.()
   }, { passive: false })
   stage.addEventListener('dblclick', (event) => {
     event.preventDefault()
@@ -4955,9 +5393,10 @@ function openWorkbench() {
     S.workbenchOffset = { x: 0, y: 0 }
     if (S.kind === 'vrm') fitVrm()
     else fitModel()
+    S.repaintRegions?.()
   })
 
-  void mountWorkbenchBody(left, state, title)
+  void mountWorkbenchBody(left, state, title, stage)
   return overlay
 }
 
@@ -4969,11 +5408,376 @@ function closeWorkbench() {
   S.workbenchPane = null
   S.workbenchOffset = { x: 0, y: 0 }
   S.workbenchHeight = undefined
+  S.repaintRegions = null
+  if (S.regionKeys !== null) {
+    document.removeEventListener('keydown', S.regionKeys, true)
+    S.regionKeys = null
+  }
   overlay.remove()
   // The seat has to be reclaimed for either stage: for a 3D model the canvas was
   // living inside the workbench pane, so removing the overlay would take the model
   // with it.
   if (S.kind === 'vrm' || S.app !== null) applyPlacements(S.config?.placement ?? ['chat'])
+}
+
+/**
+ * The touch-region editor.
+ *
+ * A region is a named rectangle over her body. Drawing happens on the stage itself —
+ * the anatomy is what the user is looking at — while this panel owns naming and
+ * stacking. Coordinates are fractions of the visible model box, so a resize, a
+ * re-fit or another browser does not move a saved region.
+ *
+ * The list is the stack: row 1 is the top layer and the first to win a hit, which
+ * is why the arrows are the same control that decides what a press reports.
+ *
+ * @param stage - The right pane that holds the model.
+ * @returns The panel element for the left column.
+ */
+function mountTouchRegions(stage) {
+  const layer = stage.querySelector('.wb-region-layer')
+  const block = el('div', { class: 'wb-regions' })
+  block.append(el('h4', { text: '触控区域' }))
+  const hint = el('span', { class: 'wb-hint-inline', text: '' })
+  const list = el('div', { class: 'wb-region-list' })
+  if (layer === null) {
+    block.append(hint)
+    hint.textContent = '舞台还没准备好'
+    return { node: block, leave: () => {} }
+  }
+
+  /** Working copy: the Host is written on a debounce, the UI never waits for it. */
+  const draft = (Array.isArray(S.config?.regions) ? S.config.regions : []).map(entry => ({ ...entry }))
+  let timer = 0
+  /** The active drawing tool, or null when a press on the model belongs to her. */
+  let tool = null
+  /** The shape being drawn right now, kept out of `draft` until it is finished. */
+  let drafting = null
+
+  // One tool at a time: the tool decides what a drag on the model means.
+  const shapeBar = el('div', { class: 'wb-shapes' })
+  const shapeButtons = new Map()
+  for (const [shape, label] of [['rect', '矩形'], ['ellipse', '椭圆'], ['polygon', '多边形'], ['brush', '画笔']]) {
+    const button = el('button', { type: 'button', class: 'wb-shape', text: label, title: SHAPE_HINTS[shape] })
+    button.addEventListener('click', () => setTool(tool === shape ? null : shape))
+    shapeBar.append(button)
+    shapeButtons.set(shape, button)
+  }
+  const tools = el('div', { class: 'wb-region-tools' })
+  const finishButton = el('button', { type: 'button', text: '闭合多边形', title: '至少三个点；也可以点回起点或按右键' })
+  finishButton.hidden = true
+  const clearButton = el('button', { type: 'button', text: '清空', title: '删掉这个角色的所有区域' })
+  tools.append(finishButton, clearButton, hint)
+  block.append(shapeBar, tools, list)
+
+  /** Draw every region over the model, in the stack order the list shows. */
+  const paint = () => {
+    const area = regionFrameRect()
+    layer.textContent = ''
+    // The finish button is only meaningful while a polygon has enough vertices.
+    const polygonPoints = drafting?.kind === 'polygon' ? drafting.points : null
+    finishButton.hidden = !(tool === 'polygon' && polygonPoints !== null && polygonPoints.length >= 3)
+    if (area === undefined) return
+    const frame = stage.getBoundingClientRect()
+    const svg = document.createElementNS(SVG_NS, 'svg')
+    svg.setAttribute('class', 'wb-region-svg')
+    svg.setAttribute('width', String(Math.max(1, frame.width)))
+    svg.setAttribute('height', String(Math.max(1, frame.height)))
+    layer.append(svg)
+    const ox = area.left - frame.left
+    const oy = area.top - frame.top
+    for (const [index, region] of draft.entries()) {
+      // A hidden region is hidden on the model, not just in the list: that is what
+      // lets a handler see what is underneath a crowded stack.
+      if (region.hidden === true) continue
+      const node = regionNode(region, ox, oy, area, SVG_NS, regionColor(index))
+      if (node !== null) svg.append(node)
+    }
+    if (drafting !== null) {
+      const node = draftingNode(drafting, ox, oy, area, SVG_NS)
+      if (node !== null) svg.append(node)
+    }
+  }
+
+  const save = async () => {
+    // An empty box would make the Host reject the whole save: name it instead of
+    // losing the rectangle the user just drew.
+    let renamed = false
+    draft.forEach((region, index) => {
+      if (region.name.trim() !== '') return
+      region.name = `区域 ${index + 1}`
+      renamed = true
+    })
+    if (renamed) render()
+    hint.textContent = '保存中…'
+    try {
+      const answer = await fetchJson(`${API}/regions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        // `hidden` is an editor convenience, not part of the map: it never leaves the page.
+        body: JSON.stringify({ regions: draft.map(({ hidden, ...region }) => region) }),
+      })
+      S.config = { ...S.config, regions: answer.regions }
+      hint.textContent = `${answer.regions.length} 个区域 · 1 号在最上层`
+    } catch (error) {
+      hint.textContent = `保存失败：${error?.message ?? error}`
+    }
+  }
+  const scheduleSave = () => {
+    if (timer !== 0) clearTimeout(timer)
+    timer = window.setTimeout(save, 600)
+  }
+
+  const move = (index, delta) => {
+    const target = index + delta
+    if (target < 0 || target >= draft.length) return
+    const [entry] = draft.splice(index, 1)
+    draft.splice(target, 0, entry)
+    render()
+    scheduleSave()
+  }
+
+  const render = () => {
+    list.textContent = ''
+    if (draft.length === 0) {
+      list.append(el('span', { class: 'wb-hint-inline', text: '还没有区域。画一个，再给它起名字。' }))
+    }
+    draft.forEach((region, index) => {
+      const color = regionColor(index)
+      const row = el('div', { class: 'wb-region-row' })
+      row.title = `第 ${index + 1} 层 · ${SHAPE_NAMES[regionShape(region)] ?? '矩形'}`
+      const swatch = el('span', { class: 'stk', text: String(index + 1) })
+      swatch.style.color = color
+      swatch.style.borderBottom = `2px solid ${color}`
+      row.append(swatch)
+      const name = el('input', { type: 'text', value: region.name, placeholder: '区域名称' })
+      name.addEventListener('input', () => {
+        region.name = name.value.slice(0, 32)
+        paint()
+        scheduleSave()
+      })
+      const eye = el('button', {
+        type: 'button',
+        class: 'wb-eye',
+        title: region.hidden === true ? '显示这个区域' : '隐藏这个区域',
+      })
+      eye.dataset.off = region.hidden === true ? '1' : '0'
+      eye.append(eyeIcon(region.hidden === true))
+      eye.addEventListener('click', () => {
+        region.hidden = region.hidden !== true
+        // Only the drawing changes: hiding is a look-at aid, not an edit.
+        paint()
+        render()
+      })
+      const up = el('button', { type: 'button', text: '↑', title: '上移一层' })
+      up.disabled = index === 0
+      up.addEventListener('click', () => move(index, -1))
+      const down = el('button', { type: 'button', text: '↓', title: '下移一层' })
+      down.disabled = index === draft.length - 1
+      down.addEventListener('click', () => move(index, 1))
+      const remove = el('button', { type: 'button', text: '×', title: '删除这个区域' })
+      remove.addEventListener('click', () => {
+        draft.splice(index, 1)
+        render()
+        scheduleSave()
+      })
+      row.append(name, eye, up, down, remove)
+      list.append(row)
+    })
+    paint()
+  }
+
+  /**
+   * Switch the active tool, or leave drawing entirely with `null`.
+   *
+   * Picking a tool is what arms the layer: until one is active, presses on the model
+   * go to her, not to the editor.
+   */
+  const setTool = (next) => {
+    tool = next
+    drafting = null
+    for (const [shape, button] of shapeButtons) button.dataset.on = shape === next ? '1' : '0'
+    layer.dataset.draw = next === null ? '0' : '1'
+    finishButton.hidden = true
+    hint.textContent = next === null
+      ? (draft.length === 0 ? '' : `${draft.length} 个区域 · 1 号在最上层`)
+      : SHAPE_HINTS[next]
+    // The model may have finished loading after the panel opened; catch up now.
+    paint()
+  }
+  finishButton.addEventListener('click', () => closePolygon())
+  clearButton.addEventListener('click', () => {
+    draft.length = 0
+    drafting = null
+    render()
+    scheduleSave()
+    hint.textContent = '已清空'
+  })
+
+  // Escape steps back one stage: first out of the unfinished shape, then out of the
+  // tool. A drawing mode with no visible way out is the worst kind of modal.
+  const onKeyDown = (event) => {
+    if (event.key !== 'Escape' || tool === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (drafting !== null) {
+      drafting = null
+      hint.textContent = SHAPE_HINTS[tool] ?? ''
+      paint()
+      return
+    }
+    setTool(null)
+  }
+  document.addEventListener('keydown', onKeyDown, true)
+
+  /** A pointer position as a fraction of the touch-region frame. */
+  const relative = (clientX, clientY) => {
+    const area = regionFrameRect()
+    if (area === undefined) return null
+    return {
+      x: (clientX - area.left) / area.width,
+      y: (clientY - area.top) / area.height,
+      area,
+    }
+  }
+
+  /**
+   * Three decimals, the precision the Host stores — and deliberately no clamping:
+   * a shape may reach past the artwork, and the editor must not pull it back.
+   */
+  const roundCoord = (value) => Math.round(value * 1000) / 1000
+
+  /** Push a finished shape onto the stack and persist it. A fresh one goes on top. */
+  const commit = (region) => {
+    draft.unshift({ name: `区域 ${draft.length + 1}`, ...region })
+    drafting = null
+    render()
+    scheduleSave()
+  }
+
+  /** Close the ring being drawn, if it has enough vertices to bound an area. */
+  const closePolygon = () => {
+    if (drafting === null || drafting.kind !== 'polygon') return
+    if (drafting.points.length < 3) {
+      hint.textContent = '至少三个点才能围成一块'
+      return
+    }
+    commit({ shape: 'polygon', points: drafting.points.map(point => [...point]) })
+  }
+
+  layer.addEventListener('pointerdown', (event) => {
+    if (tool === null || event.button !== 0) return
+    // The stage listens for drags in the bubble phase: a press here is drawing, not
+    // moving her, so it must not reach that handler.
+    event.preventDefault()
+    event.stopPropagation()
+    const point = relative(event.clientX, event.clientY)
+    if (point === null) return
+    try {
+      layer.setPointerCapture(event.pointerId)
+    } catch {
+      // Capture is best-effort; the layer still sees the moves that stay inside it.
+    }
+    if (tool === 'rect' || tool === 'ellipse') {
+      drafting = { kind: tool, start: point, current: point }
+      paint()
+      return
+    }
+    if (tool === 'brush') {
+      drafting = { kind: 'brush', points: [[roundCoord(point.x), roundCoord(point.y)]] }
+      paint()
+      return
+    }
+    // Polygon: every press adds a vertex, and a press near the first one closes it.
+    const first = drafting?.points?.[0]
+    if (first !== undefined) {
+      const gap = Math.hypot((point.x - first[0]) * point.area.width, (point.y - first[1]) * point.area.height)
+      if (gap <= 12) {
+        closePolygon()
+        return
+      }
+    }
+    if (drafting === null) drafting = { kind: 'polygon', points: [] }
+    drafting.points.push([roundCoord(point.x), roundCoord(point.y)])
+    paint()
+  })
+
+  layer.addEventListener('pointermove', (event) => {
+    if (tool === null || drafting === null) return
+    const point = relative(event.clientX, event.clientY)
+    if (point === null) return
+    if (drafting.kind === 'polygon') {
+      // The rubber band to the next vertex, so the shape is visible before it closes.
+      drafting.hover = { x: point.x, y: point.y }
+      paint()
+      return
+    }
+    if (drafting.kind === 'brush') {
+      const last = drafting.points[drafting.points.length - 1]
+      const step = Math.hypot((point.x - last[0]) * point.area.width, (point.y - last[1]) * point.area.height)
+      // One vertex per few pixels: a stroke must not carry a thousand of them.
+      if (step < 4 || drafting.points.length >= 400) return
+      drafting.points.push([roundCoord(point.x), roundCoord(point.y)])
+      paint()
+      return
+    }
+    drafting.current = point
+    paint()
+  })
+  layer.addEventListener('contextmenu', (event) => {
+    if (tool !== 'polygon') return
+    event.preventDefault()
+    if (drafting !== null) closePolygon()
+  })
+
+  const finishDraw = (event) => {
+    // A polygon is closed by its own presses, not by releasing the button.
+    if (drafting === null || drafting.kind === 'polygon') return
+    const kind = drafting.kind
+    const point = event.type === 'pointercancel' ? null : relative(event.clientX, event.clientY)
+    if (kind === 'brush') {
+      // A lasso is finished by letting go: the ring closes from the last point back to
+      // the first, and what it enclosed is the region — not the path the pointer took.
+      const points = drafting.points
+      drafting = null
+      if (points.length < 3) {
+        hint.textContent = '圈大一点，至少三个点'
+        paint()
+        return
+      }
+      commit({ shape: 'brush', points })
+      return
+    }
+    const start = drafting.start
+    drafting = null
+    if (point === null) {
+      paint()
+      return
+    }
+    const x = Math.min(start.x, point.x)
+    const y = Math.min(start.y, point.y)
+    const w = Math.abs(point.x - start.x)
+    const h = Math.abs(point.y - start.y)
+    if (w < 0.02 || h < 0.02) {
+      hint.textContent = '太小了，再拖大一点'
+      paint()
+      return
+    }
+    commit({ shape: kind, x: roundCoord(x), y: roundCoord(y), w: roundCoord(w), h: roundCoord(h) })
+  }
+  layer.addEventListener('pointerup', finishDraw)
+  layer.addEventListener('pointercancel', finishDraw)
+
+  // Moving or zooming the model inside the workbench moves the artwork under these
+  // shapes; the painter is asked to catch up once the drag settles.
+  S.repaintRegions = paint
+  // The Escape handler is document-wide; the workbench takes it down with itself.
+  S.regionKeys = onKeyDown
+  render()
+  setTool(null)
+  // The left column shows this pane only while its own tab is open, so the caller
+  // needs both the node and a way to leave draw mode when that tab closes.
+  return { node: block, leave: () => setTool(null) }
 }
 
 /**
@@ -5264,9 +6068,46 @@ function mountWorkbenchRecipe(state) {
 }
 
 /** Load the parameter table and fill the left pane. */
-async function mountWorkbenchBody(left, state, title) {
+async function mountWorkbenchBody(left, state, title, stage = null) {
   if (S.kind === 'vrm') return mountVrmWorkbenchBody(left, state, title)
   left.textContent = ''
+  // Two pages share the column. They are separate tasks — one edits what a slider
+  // means, the other where a press lands — so they get separate tabs instead of
+  // stacking into one scroll.
+  const tabBar = el('div', { class: 'wb-tabs' })
+  const paneHost = el('div', { class: 'wb-panes' })
+  const paramsPane = el('div', { class: 'wb-pane' })
+  const regionsPane = el('div', { class: 'wb-pane' })
+  paneHost.append(paramsPane, regionsPane)
+  left.append(tabBar, paneHost)
+  const regionLayer = stage === null ? null : stage.querySelector('.wb-region-layer')
+  const regions = stage === null ? null : mountTouchRegions(stage)
+  if (regions !== null) {
+    regionsPane.append(regions.node)
+    if (regionLayer !== null) regionLayer.hidden = true
+  }
+  const pages = [{ label: '参数', pane: paramsPane }]
+  if (regions !== null) pages.push({ label: '触控区域', pane: regionsPane, leave: regions.leave })
+  const showPage = (index) => {
+    for (const [i, page] of pages.entries()) {
+      page.pane.hidden = i !== index
+      if (page.button !== undefined) page.button.dataset.on = i === index ? '1' : '0'
+    }
+    if (regionLayer === null) return
+    const onRegions = pages[index]?.pane === regionsPane
+    regionLayer.hidden = !onRegions
+    // Leaving the tab ends draw mode: a later press on the model should move her
+    // again rather than draw a stray box.
+    if (onRegions) S.repaintRegions?.()
+    else regions?.leave()
+  }
+  for (const [index, page] of pages.entries()) {
+    const button = el('button', { type: 'button', class: 'wb-tab', text: page.label })
+    button.addEventListener('click', () => showPage(index))
+    tabBar.append(button)
+    page.button = button
+  }
+  showPage(0)
   if (S.rig === null || !S.rig.core) {
     state.textContent = '舞台未运行，读不到参数量程。'
     return
@@ -5424,8 +6265,8 @@ async function mountWorkbenchBody(left, state, title) {
   // 列表与预设共用左栏的高度，由一根横分隔条分配
   const presetsPane = mountWorkbenchPresets(rows, touched)
   const presetsSplit = el('div', { class: 'wb-presets-split', title: '拖动调整参数列表与预设表情的高度比例' })
-  bindPresetsSplit(presetsSplit, left)
-  left.append(
+  bindPresetsSplit(presetsSplit, paramsPane)
+  paramsPane.append(
     filter,
     list,
     actions,
@@ -5804,7 +6645,7 @@ async function boot() {
   }
   if (S.disposed) return
   applyBubbleStyle(S.config)
-  applyFrostMode(S.config.opacity)
+  applyFrostMode(S.config.frost === true)
   applyContentAlpha(S.config.contentAlpha)
   preloadVrm(S.config)
   // Booting the stage must not hold up the plugin table: the shell may still

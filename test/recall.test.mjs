@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildDirectorPrompt, mergeDirectorMemory, selectRelevantFacts } from '../lib/director.mjs'
+import { digestReply } from '../lib/memory.mjs'
 import { buildRounds, normalizeForSearch, readRounds, searchRounds, trimTranscript } from '../lib/recall.mjs'
 
 const TRANSCRIPT = [
@@ -45,10 +46,57 @@ test('reading a round brings its neighbours when asked', () => {
   assert.deepEqual(readRounds(rounds, 99), [])
 })
 
-test('the transcript stays bounded', () => {
-  const many = Array.from({ length: 10 }, (_, index) => ({ role: 'user', text: `第${index}句` }))
-  assert.equal(trimTranscript(many, 4).length, 4)
-  assert.equal(trimTranscript(many, 4)[3].text, '第9句')
+test('the transcript stays under a byte budget, not an entry count', () => {
+  const many = Array.from({ length: 400 }, (_, index) => ({ role: 'user', text: `第${index}句，长度差不多的一句话` }))
+  // Well under the budget: nothing is dropped, however many entries that is.
+  assert.equal(trimTranscript(many, 10 * 1024 * 1024).length, 400)
+  // A small budget keeps only the tail, and the newest entry is always kept.
+  const trimmed = trimTranscript(many, 2048)
+  assert.ok(trimmed.length < 400)
+  assert.equal(trimmed[trimmed.length - 1].text, many[399].text)
+  // One oversized entry still survives: dropping what was just said is worse.
+  const huge = [{ role: 'assistant', text: 'x'.repeat(5000) }]
+  assert.equal(trimTranscript(huge, 1024).length, 1)
+})
+
+test('a reply is digested to its sentences and loses its scaffolding', () => {
+  const reply = [
+    '先说结论：这条通不过。',
+    '',
+    '```js',
+    'const x = 1',
+    '```',
+    '',
+    '| 列 | 值 |',
+    '| --- | --- |',
+    '',
+    '原因是缓存没失效。清掉再试一次。',
+  ].join('\n')
+  const digest = digestReply(reply)
+  assert.match(digest, /先说结论/)
+  assert.match(digest, /原因是缓存没失效/)
+  // Nothing is abridged: the second sentence of the paragraph stays too.
+  assert.match(digest, /清掉再试一次/)
+  assert.doesNotMatch(digest, /const x = 1/)
+  assert.doesNotMatch(digest, /\| 列 \| 值 \|/)
+  // A plain paragraph comes back word for word.
+  assert.equal(digestReply('第一句。第二句。第三句。'), '第一句。第二句。第三句。')
+  // A reply that was nothing but code leaves nothing worth keeping.
+  assert.equal(digestReply('```js\nconst y = 2\n```'), '')
+  assert.equal(digestReply(''), '')
+})
+
+test('a spoken line joins the round as performed speech, not as a reply', () => {
+  const rounds = buildRounds([
+    { role: 'user', text: '过来' },
+    { role: 'assistant', kind: 'line', text: '来了。' },
+    { role: 'assistant', kind: 'digest', text: '她贴到了边框上。' },
+  ])
+  assert.equal(rounds.length, 1)
+  // Both are assistant speech in one round, but only the bubble is marked performed.
+  assert.match(rounds[0].assistant, /〔气泡〕来了。/)
+  assert.match(rounds[0].assistant, /她贴到了边框上。/)
+  assert.doesNotMatch(rounds[0].assistant, /〔气泡〕她贴到了边框上/)
 })
 
 test('only facts that touch the current conversation travel with the prompt', () => {

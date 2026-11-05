@@ -1593,6 +1593,154 @@ test('the default pose is saved in the pack and refused when unknown', async () 
   assert.equal(refused.statusCode, 400)
 })
 
+test('touch regions keep their stack order in the pack', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-regions-'))
+  process.env.DSH_HOME = home
+  const pack = join(home, 'live2d', 'packs', 'whale')
+  await mkdir(pack, { recursive: true })
+  await writeFile(join(pack, 'whale.model3.json'), JSON.stringify({ FileReferences: { Moc: 'whale.moc3' } }))
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'whale', director: false }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  const route = harness.routes.find(entry => entry.path.endsWith('/regions'))
+  assert.ok(route !== undefined)
+
+  const saved = await call(route, {
+    method: 'POST',
+    body: JSON.stringify({
+      regions: [
+        { name: '头', x: 0.1, y: 0.02, w: 0.8, h: 0.25 },
+        { name: '胸', x: 0.2, y: 0.3, w: 0.6, h: 0.15 },
+      ],
+    }),
+  })
+  assert.equal(saved.statusCode, 200)
+  assert.deepEqual(JSON.parse(saved.text).regions.map(entry => entry.name), ['头', '胸'])
+
+  // The browser reads the stack on load, so `/config` has to carry it.
+  const config = await call(harness.routes.find(entry => entry.path.endsWith('/config')))
+  assert.deepEqual(JSON.parse(config.text).regions.map(entry => entry.name), ['头', '胸'])
+
+  // Reordering layers is a save of the whole list: index 0 is the top layer.
+  const swapped = await call(route, {
+    method: 'POST',
+    body: JSON.stringify({
+      regions: [
+        { name: '胸', x: 0.2, y: 0.3, w: 0.6, h: 0.15 },
+        { name: '头', x: 0.1, y: 0.02, w: 0.8, h: 0.25 },
+      ],
+    }),
+  })
+  assert.deepEqual(JSON.parse(swapped.text).regions.map(entry => entry.name), ['胸', '头'])
+
+  // A nameless region, or one reaching absurdly far outside the model box, is
+  // refused — and the refused attempt leaves the stored map untouched.
+  const nameless = await call(route, { method: 'POST', body: JSON.stringify({ regions: [{ name: '  ', x: 0, y: 0, w: 1, h: 1 }] }) })
+  assert.equal(nameless.statusCode, 400)
+  const outside = await call(route, { method: 'POST', body: JSON.stringify({ regions: [{ name: '头', x: 3.5, y: 0, w: 0.9, h: 0.2 }] }) })
+  assert.equal(outside.statusCode, 400)
+  // Reaching a little past the artwork is allowed: a whole-body frame often does.
+  const past = await call(route, { method: 'POST', body: JSON.stringify({ regions: [{ name: '整只', x: -0.1, y: -0.05, w: 1.2, h: 1.1 }] }) })
+  assert.equal(past.statusCode, 200)
+  assert.deepEqual(JSON.parse(past.text).regions[0], { name: '整只', shape: 'rect', x: -0.1, y: -0.05, w: 1.2, h: 1.1 })
+  // Put the two named ones back so the rest of this test reads the same.
+  await call(route, {
+    method: 'POST',
+    body: JSON.stringify({ regions: [
+      { name: '头', x: 0.1, y: 0.02, w: 0.8, h: 0.25 },
+      { name: '胸', x: 0.2, y: 0.3, w: 0.6, h: 0.15 },
+    ] }),
+  })
+  const stored = JSON.parse(await readFile(join(pack, 'regions.json'), 'utf8'))
+  assert.deepEqual(stored.regions.map(entry => entry.name), ['头', '胸'])
+  harness.disposeAll()
+})
+
+test('touch regions keep their shape and survive a bad one', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-shapes-'))
+  process.env.DSH_HOME = home
+  const pack = join(home, 'live2d', 'packs', 'whale')
+  await mkdir(pack, { recursive: true })
+  await writeFile(join(pack, 'whale.model3.json'), JSON.stringify({ FileReferences: { Moc: 'whale.moc3' } }))
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: 'whale', director: false }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  const route = harness.routes.find(entry => entry.path.endsWith('/regions'))
+  assert.ok(route !== undefined)
+
+  const saved = await call(route, {
+    method: 'POST',
+    body: JSON.stringify({
+      regions: [
+        { name: '头顶', shape: 'ellipse', x: 0.3, y: 0.02, w: 0.4, h: 0.2 },
+        { name: '尾巴', shape: 'polygon', points: [[0.1, 0.8], [0.3, 0.7], [0.25, 0.95]] },
+        { name: '抹一笔', shape: 'brush', radius: 0.03, points: [[0.4, 0.5], [0.5, 0.55], [0.55, 0.6]] },
+      ],
+    }),
+  })
+  assert.equal(saved.statusCode, 200)
+  const regions = JSON.parse(saved.text).regions
+  assert.deepEqual(regions.map(entry => entry.shape), ['ellipse', 'polygon', 'brush'])
+  // The shape-specific fields are what came back, not a rectangle with extra keys.
+  assert.deepEqual(regions[1].points, [[0.1, 0.8], [0.3, 0.7], [0.25, 0.95]])
+  assert.equal(regions[2].radius, 0.03)
+
+  // A polygon needs three vertices; two stray points must not become a region.
+  const thin = await call(route, { method: 'POST', body: JSON.stringify({ regions: [{ name: '线', shape: 'polygon', points: [[0.1, 0.1], [0.2, 0.2]] }] }) })
+  assert.equal(thin.statusCode, 400)
+  // A point absurdly outside the model box is refused rather than clamped into a
+  // shape nobody drew; a point just past the artwork is kept as drawn.
+  const stray = await call(route, { method: 'POST', body: JSON.stringify({ regions: [{ name: '外', shape: 'polygon', points: [[0.1, 0.1], [4.2, 0.2], [0.3, 0.3]] }] }) })
+  assert.equal(stray.statusCode, 400)
+  const overhang = await call(route, { method: 'POST', body: JSON.stringify({ regions: [{ name: '外沿', shape: 'polygon', points: [[-0.1, 0.1], [1.15, 0.2], [0.3, 0.3]] }] }) })
+  assert.equal(overhang.statusCode, 200)
+  assert.deepEqual(JSON.parse(overhang.text).regions[0].points, [[-0.1, 0.1], [1.15, 0.2], [0.3, 0.3]])
+  // The refused save left the good map alone. (The overhang save above replaced it,
+  // so put the three back first.)
+  await call(route, {
+    method: 'POST',
+    body: JSON.stringify({
+      regions: [
+        { name: '头顶', shape: 'ellipse', x: 0.3, y: 0.02, w: 0.4, h: 0.2 },
+        { name: '尾巴', shape: 'polygon', points: [[0.1, 0.8], [0.3, 0.7], [0.25, 0.95]] },
+        { name: '抹一笔', shape: 'brush', radius: 0.03, points: [[0.4, 0.5], [0.5, 0.55], [0.55, 0.6]] },
+      ],
+    }),
+  })
+  const stored = JSON.parse(await readFile(join(pack, 'regions.json'), 'utf8'))
+  assert.deepEqual(stored.regions.map(entry => entry.name), ['头顶', '尾巴', '抹一笔'])
+
+  // A region written before shapes existed is still a rectangle.
+  await writeFile(join(pack, 'regions.json'), JSON.stringify({ version: 1, regions: [{ name: '旧', x: 0.1, y: 0.2, w: 0.3, h: 0.4 }] }))
+  const legacy = await call(route)
+  assert.deepEqual(JSON.parse(legacy.text).regions, [{ name: '旧', shape: 'rect', x: 0.1, y: 0.2, w: 0.3, h: 0.4 }])
+  harness.disposeAll()
+})
+
+test('a pack chosen by absolute path can still save its touch regions', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-abspack-'))
+  process.env.DSH_HOME = home
+  // A pack living outside both roots used to fail every save with
+  // "model path escapes the roots": the check only knew the two roots.
+  const packDir = join(home, 'elsewhere', 'whale-pack')
+  await mkdir(packDir, { recursive: true })
+  await mkdir(join(home, 'live2d'), { recursive: true })
+  await writeFile(join(packDir, 'whale.model3.json'), JSON.stringify({ FileReferences: { Moc: 'whale.moc3' } }))
+  await writeFile(join(home, 'live2d', 'settings.json'), JSON.stringify({ pack: packDir, director: false }))
+
+  const harness = fakeContext()
+  apply(harness.ctx, { packsRoot: join(home, 'live2d', 'packs'), modelsRoot: join(home, 'live2d', 'models') })
+  const route = harness.routes.find(entry => entry.path.endsWith('/regions'))
+  assert.ok(route !== undefined)
+
+  const saved = await call(route, { method: 'POST', body: JSON.stringify({ regions: [{ name: '头', x: 0.1, y: 0.1, w: 0.5, h: 0.3 }] }) })
+  assert.equal(saved.statusCode, 200)
+  assert.ok(existsSync(join(packDir, 'regions.json')), 'the file belongs beside the model, not under a root')
+  harness.disposeAll()
+})
+
 test('a pack declares its own on-stage scale for the browser fit', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-live-tavern-stage-'))
   process.env.DSH_HOME = home
